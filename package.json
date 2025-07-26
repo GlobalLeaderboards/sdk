@@ -1,0 +1,61 @@
+{
+  "name": "@globalleaderboards/sdk",
+  "version": "0.1.0",
+  "description": "Official SDK for GlobalLeaderboards.net - Add competitive leaderboards to any application",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "yarn build"
+  },
+  "keywords": [
+    "leaderboards",
+    "gaming",
+    "highscores",
+    "sdk",
+    "api",
+    "realtime",
+    "websocket",
+    "competitive"
+  ],
+  "author": "GlobalLeaderboards.net",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:GlobalLeaderboards/sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/GlobalLeaderboards/sdk/issues"
+  },
+  "homepage": "https://globalleaderboards.net",
+  "dependencies": {
+    "ulid": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "barva": "^1.1.0",
+    "eslint": "^8.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
