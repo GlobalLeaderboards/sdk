@@ -1,21 +1,26 @@
 {
   "name": "@globalleaderboards/sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Official SDK for GlobalLeaderboards.net - Add competitive leaderboards to any application",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "docs": "yarn docs:html && yarn docs:markdown",
+    "docs:html": "typedoc --options typedoc-html.json",
+    "docs:markdown": "typedoc --options typedoc-markdown.json",
+    "docs:watch": "typedoc --options typedoc-html.json --watch",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "yarn build",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "yarn build"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "leaderboards",
@@ -48,6 +53,8 @@
     "barva": "^1.1.0",
     "eslint": "^8.0.0",
     "tsup": "^8.0.0",
+    "typedoc": "^0.28.7",
+    "typedoc-plugin-markdown": "^4.7.1",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
   },

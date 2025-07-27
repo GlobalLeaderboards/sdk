@@ -22,6 +22,11 @@ yarn-error.log*
 coverage/
 .nyc_output/
 
+# Documentation
+docs/
+docs-html/
+docs-markdown/
+
 # Environment
 .env
 .env.local

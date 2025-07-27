@@ -49,6 +49,75 @@ export interface SubmitScoreResponse {
 }
 
 /**
+ * Bulk score submission request
+ */
+export interface BulkSubmitScoreRequest {
+  /** Array of scores to submit */
+  scores: SubmitScoreRequest[]
+}
+
+/**
+ * Single score result in bulk response
+ */
+export interface BulkScoreResult extends SubmitScoreResponse {
+  /** Leaderboard ID */
+  leaderboard_id: string
+  /** User ID */
+  user_id: string
+}
+
+/**
+ * Bulk score submission response
+ */
+export interface BulkSubmitScoreResponse {
+  /** Individual results for each score */
+  results: BulkScoreResult[]
+  /** Summary statistics */
+  summary: {
+    /** Total scores submitted */
+    total: number
+    /** Successful submissions */
+    successful: number
+    /** Failed submissions */
+    failed: number
+  }
+}
+
+/**
+ * Extended leaderboard entry with leaderboard info
+ */
+export interface UserScoreEntry extends LeaderboardEntry {
+  /** Leaderboard ID */
+  leaderboard_id: string
+  /** Leaderboard name */
+  leaderboard_name: string
+}
+
+/**
+ * User scores response
+ */
+export interface UserScoresResponse {
+  /** User's scores across leaderboards */
+  data: UserScoreEntry[]
+  /** Pagination information */
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    pages: number
+  }
+  /** User summary */
+  user: {
+    /** User ID */
+    id: string
+    /** Total number of scores */
+    total_scores: number
+    /** Best rank achieved */
+    best_rank: number
+  }
+}
+
+/**
  * Leaderboard entry
  */
 export interface LeaderboardEntry {
@@ -81,9 +150,9 @@ export interface LeaderboardData {
 }
 
 /**
- * Leaderboard response
+ * Leaderboard entries response - matches OpenAPI LeaderboardEntriesResponse
  */
-export interface LeaderboardResponse {
+export interface LeaderboardEntriesResponse {
   /** Leaderboard entries */
   data: LeaderboardEntry[]
   /** Pagination information */
@@ -98,7 +167,7 @@ export interface LeaderboardResponse {
 }
 
 /**
- * WebSocket message types
+ * WebSocket message types - matches OpenAPI spec
  */
 export type WebSocketMessageType = 
   | 'subscribe'
@@ -106,7 +175,6 @@ export type WebSocketMessageType =
   | 'ping'
   | 'pong'
   | 'leaderboard_update'
-  | 'new_score'
   | 'user_rank_update'
   | 'error'
 
@@ -151,22 +219,6 @@ export interface LeaderboardUpdateMessage extends WebSocketMessage {
 }
 
 /**
- * New score message
- */
-export interface NewScoreMessage extends WebSocketMessage {
-  type: 'new_score'
-  data: {
-    leaderboard_id: string
-    user_id: string
-    user_name: string
-    score: number
-    rank: number
-    timestamp: string
-    previous_rank?: number
-  }
-}
-
-/**
  * User rank update message
  */
 export interface UserRankUpdateMessage extends WebSocketMessage {
@@ -199,6 +251,99 @@ export interface ApiErrorResponse {
 }
 
 /**
+ * API info response
+ */
+export interface ApiInfoResponse {
+  /** API name */
+  name: string
+  /** Package version */
+  version: string
+  /** API version */
+  apiVersion: string
+  /** Environment */
+  environment: 'development' | 'staging' | 'production'
+  /** Current timestamp */
+  timestamp: string
+  /** Available endpoints */
+  endpoints: {
+    health: {
+      basic: string
+      detailed: string
+    }
+    public: {
+      description: string
+      scores: string
+      leaderboards: string
+      websocket: string
+    }
+    dashboard: {
+      description: string
+      auth: string
+      accounts: string
+      apps: string
+      leaderboards: string
+      analytics: string
+    }
+    admin: {
+      description: string
+      auth: string
+      accounts: string
+      apps: string
+      analytics: string
+    }
+  }
+  /** Documentation URL */
+  documentation: string
+  /** Support email */
+  support: string
+}
+
+/**
+ * Basic health check response
+ */
+export interface HealthResponse {
+  /** Health status */
+  status: 'healthy' | 'unhealthy'
+  /** API version */
+  version: string
+  /** Current timestamp */
+  timestamp: string
+}
+
+/**
+ * Detailed health check response
+ */
+export interface DetailedHealthResponse extends HealthResponse {
+  /** Individual service statuses */
+  services: {
+    /** Database health */
+    database: {
+      status: 'healthy' | 'unhealthy'
+      latency?: number
+    }
+    /** Cache health */
+    cache: {
+      status: 'healthy' | 'unhealthy'
+      latency?: number
+    }
+    /** Storage health */
+    storage: {
+      status: 'healthy' | 'unhealthy'
+      latency?: number
+    }
+  }
+  /** System information */
+  system: {
+    /** Memory usage in MB */
+    memoryUsage: number
+    /** Uptime in seconds */
+    uptime: number
+    /** Environment */
+    environment: string
+  }
+}
+
+/**
  * SDK error class
  */
 export class GlobalLeaderboardsError extends Error {
@@ -225,8 +370,6 @@ export interface WebSocketHandlers {
   onError?: (error: Error) => void
   /** Called when leaderboard is updated */
   onLeaderboardUpdate?: (data: LeaderboardUpdateMessage['data']) => void
-  /** Called when a new score is submitted */
-  onNewScore?: (data: NewScoreMessage['data']) => void
   /** Called when user rank changes */
   onUserRankUpdate?: (data: UserRankUpdateMessage['data']) => void
   /** Called for any message */

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["./src/index.ts"],
+  "out": "./docs-markdown",
+  "name": "@globalleaderboards/sdk",
+  "readme": "./README.md",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "includeVersion": true,
+  "plugin": ["typedoc-plugin-markdown"],
+  "theme": "markdown",
+  "hideBreadcrumbs": true,
+  "mergeReadme": true,
+  "sort": ["source-order"],
+  "visibilityFilters": {
+    "protected": false,
+    "private": false,
+    "inherited": true,
+    "external": false
+  },
+  "searchInComments": true,
+  "cleanOutputDir": true,
+  "githubPages": false,
+  "publicPath": "./",
+  "useCodeBlocks": true,
+  "expandObjects": true,
+  "expandParameters": true,
+  "parametersFormat": "table",
+  "propertiesFormat": "table",
+  "enumMembersFormat": "table",
+  "typeDeclarationFormat": "table",
+  "indexFormat": "table"
+}

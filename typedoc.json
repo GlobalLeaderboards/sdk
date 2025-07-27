@@ -1,0 +1,29 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["./src/index.ts"],
+  "out": "./docs",
+  "name": "@globalleaderboards/sdk",
+  "readme": "./README.md",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "includeVersion": true,
+  "navigationLinks": {
+    "GitHub": "https://github.com/globalleaderboards/sdk",
+    "API Documentation": "https://docs.globalleaderboards.net",
+    "GlobalLeaderboards.net": "https://globalleaderboards.net"
+  },
+  "categorizeByGroup": true,
+  "sort": ["source-order"],
+  "visibilityFilters": {
+    "protected": false,
+    "private": false,
+    "inherited": true,
+    "external": false
+  },
+  "plugin": ["typedoc-plugin-markdown"],
+  "theme": "default",
+  "lightHighlightTheme": "github-light",
+  "darkHighlightTheme": "github-dark",
+  "searchInComments": true,
+  "cleanOutputDir": true
+}

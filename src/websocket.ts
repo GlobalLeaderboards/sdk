@@ -4,7 +4,6 @@ import {
   SubscribeMessage,
   UnsubscribeMessage,
   LeaderboardUpdateMessage,
-  NewScoreMessage,
   UserRankUpdateMessage,
   ErrorMessage,
   GlobalLeaderboardsError
@@ -191,12 +190,6 @@ export class LeaderboardWebSocket {
       case 'leaderboard_update':
         this.handlers.onLeaderboardUpdate?.(
           (message as LeaderboardUpdateMessage).data
-        )
-        break
-      
-      case 'new_score':
-        this.handlers.onNewScore?.(
-          (message as NewScoreMessage).data
         )
         break
       
