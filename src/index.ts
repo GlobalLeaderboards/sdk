@@ -53,7 +53,7 @@ export class GlobalLeaderboards {
     this.config = {
       apiKey,
       baseUrl: config?.baseUrl || 'https://api.globalleaderboards.net',
-      wsUrl: config?.wsUrl || 'wss://api.globalleaderboards.net',
+      wsUrl: config?.wsUrl || 'wss://ws.globalleaderboards.net',
       timeout: config?.timeout || 30000,
       autoRetry: config?.autoRetry ?? true,
       maxRetries: config?.maxRetries || 3
