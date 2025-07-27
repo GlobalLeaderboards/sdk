@@ -1,6 +1,6 @@
 {
   "name": "@globalleaderboards/sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Official SDK for GlobalLeaderboards.net - Add competitive leaderboards to any application",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

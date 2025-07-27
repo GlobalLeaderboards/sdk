@@ -12,6 +12,14 @@ yarn add @globalleaderboards/sdk
 pnpm add @globalleaderboards/sdk
 ```
 
+## Authentication
+
+The SDK uses the industry-standard `Authorization: Bearer <api-key>` header for authentication. Your API key can be obtained from the GlobalLeaderboards dashboard. Each API key is associated with a specific app, ensuring proper data isolation.
+
+```javascript
+const leaderboard = new GlobalLeaderboards('your-api-key')
+```
+
 ## Quick Start
 
 ```javascript

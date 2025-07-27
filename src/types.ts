@@ -4,8 +4,6 @@
 export interface GlobalLeaderboardsConfig {
   /** API key for authentication */
   apiKey: string
-  /** Optional application ID to restrict operations to a specific app */
-  appId?: string
   /** Base URL for the API (default: https://api.globalleaderboards.net) */
   baseUrl?: string
   /** WebSocket URL (default: wss://api.globalleaderboards.net) */

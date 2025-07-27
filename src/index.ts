@@ -36,7 +36,6 @@ export class GlobalLeaderboards {
    * 
    * @param apiKey - Your API key from GlobalLeaderboards.net
    * @param config - Optional configuration options
-   * @param config.appId - Optional application ID to restrict operations
    * @param config.baseUrl - API base URL (default: https://api.globalleaderboards.net)
    * @param config.wsUrl - WebSocket URL (default: wss://api.globalleaderboards.net)
    * @param config.timeout - Request timeout in ms (default: 30000)
@@ -46,7 +45,6 @@ export class GlobalLeaderboards {
    * @example
    * ```typescript
    * const leaderboard = new GlobalLeaderboards('your-api-key', {
-   *   appId: 'your-app-id',
    *   timeout: 60000
    * })
    * ```
@@ -54,7 +52,6 @@ export class GlobalLeaderboards {
   constructor(apiKey: string, config?: Partial<GlobalLeaderboardsConfig>) {
     this.config = {
       apiKey,
-      appId: config?.appId || '',
       baseUrl: config?.baseUrl || 'https://api.globalleaderboards.net',
       wsUrl: config?.wsUrl || 'wss://api.globalleaderboards.net',
       timeout: config?.timeout || 30000,
@@ -136,7 +133,7 @@ export class GlobalLeaderboards {
    * 
    * @param playerId - Player's unique identifier
    * @param score - Score value (must be >= 0)
-   * @param leaderboardId - Target leaderboard ID (uses appId from config if not provided)
+   * @param leaderboardId - Target leaderboard ID
    * @param options - Optional submission options
    * @param options.userName - Display name (defaults to playerId)
    * @param options.metadata - Optional metadata
@@ -161,19 +158,16 @@ export class GlobalLeaderboards {
       metadata?: Record<string, unknown>
     }
   ): Promise<SubmitScoreResponse> {
-    // If no leaderboardId provided, use a default one from config
-    const targetLeaderboardId = leaderboardId || this.config.appId
-    
-    if (!targetLeaderboardId) {
+    if (!leaderboardId) {
       throw new GlobalLeaderboardsError(
-        'Leaderboard ID is required. Provide it as a parameter or set appId in config.',
+        'Leaderboard ID is required',
         'MISSING_LEADERBOARD_ID'
       )
     }
 
     // Validation is handled in the submit method
     return this.submit(playerId, score, {
-      leaderboardId: targetLeaderboardId,
+      leaderboardId: leaderboardId,
       userName: options?.userName,
       metadata: options?.metadata
     })
@@ -214,7 +208,7 @@ export class GlobalLeaderboards {
     if (options?.aroundUser) params.append('around_user', options.aroundUser)
 
     const query = params.toString()
-    const path = `/v1/leaderboards/${leaderboardId}${query ? `?${query}` : ''}`
+    const path = `/v1/leaderboards/${leaderboardId}/scores${query ? `?${query}` : ''}`
 
     return this.request<LeaderboardEntriesResponse>('GET', path)
   }
