@@ -63,7 +63,7 @@ export class LeaderboardWebSocket {
       params.append('user_id', userId)
     }
 
-    const url = `${this.wsUrl}/v1/ws?${params.toString()}`
+    const url = `${this.wsUrl}/v1/ws/connect?${params.toString()}`
 
     try {
       this.ws = new WebSocket(url)
