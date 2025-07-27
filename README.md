@@ -435,10 +435,9 @@ Full API documentation is available at [docs.globalleaderboards.net](https://doc
 
 ## Support
 
-- 📧 Email: support@globalleaderboards.net
+- 📧 Email: gl@smokingmedia.com
 - 📚 Documentation: https://docs.globalleaderboards.net
 - 🐛 Issues: https://github.com/globalleaderboards/sdk/issues
-- 💬 Discord: https://discord.gg/globalleaderboards
 
 ## License
 
