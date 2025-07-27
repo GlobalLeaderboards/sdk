@@ -429,6 +429,10 @@ When rate limited, the SDK will automatically retry with exponential backoff if 
 5. **Subscribe to updates** - Use WebSocket for real-time leaderboards
 6. **Generate IDs** - Use `generateId()` for consistent ID format
 
+## Documentation
+
+Full API documentation is available at [docs.globalleaderboards.net](https://docs.globalleaderboards.net)
+
 ## Support
 
 - 📧 Email: support@globalleaderboards.net
