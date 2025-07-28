@@ -56,7 +56,7 @@ export class GlobalLeaderboards {
     this.config = {
       apiKey,
       baseUrl: config?.baseUrl || 'https://api.globalleaderboards.net',
-      wsUrl: config?.wsUrl || 'wss://ws.globalleaderboards.net',
+      wsUrl: config?.wsUrl || 'wss://api.globalleaderboards.net',
       timeout: config?.timeout || 30000,
       autoRetry: config?.autoRetry ?? true,
       maxRetries: config?.maxRetries || 3
@@ -285,10 +285,11 @@ export class GlobalLeaderboards {
   /**
    * Connect to WebSocket for real-time leaderboard updates
    * 
-   * @deprecated Consider using `connectSSE()` instead. SSE provides the same real-time
-   * updates with simpler implementation, automatic reconnection, and better firewall 
-   * compatibility. The current WebSocket implementation only receives data from the 
-   * server and does not support sending data back.
+   * WebSocket connections now work through the main API domain with full
+   * Cloudflare proxy protection. Both WebSocket and SSE are supported options
+   * for real-time updates. Choose based on your specific needs:
+   * - WebSocket: Lower latency, binary support, bidirectional potential
+   * - SSE: Simpler implementation, automatic reconnection, better firewall compatibility
    * 
    * @param handlers - Event handlers for WebSocket events
    * @param handlers.onConnect - Called when connection is established
