@@ -1,6 +1,7 @@
 # @globalleaderboards/sdk
 
-Official SDK for GlobalLeaderboards.net - Add competitive leaderboards to any application in under 5 minutes.
+Official SDK for GlobalLeaderboards.net - Add competitive leaderboards to any
+application in under 5 minutes.
 
 ## Installation
 
@@ -14,7 +15,10 @@ pnpm add @globalleaderboards/sdk
 
 ## Authentication
 
-The SDK uses the industry-standard `Authorization: Bearer <api-key>` header for authentication. Your API key can be obtained from the GlobalLeaderboards dashboard. Each API key is associated with a specific app, ensuring proper data isolation.
+The SDK uses the industry-standard `Authorization: Bearer <api-key>` header for
+authentication. Your API key can be obtained from the GlobalLeaderboards
+dashboard. Each API key is associated with a specific app, ensuring proper data
+isolation.
 
 ```javascript
 const leaderboard = new GlobalLeaderboards('your-api-key')
@@ -23,7 +27,7 @@ const leaderboard = new GlobalLeaderboards('your-api-key')
 ## Quick Start
 
 ```javascript
-import { GlobalLeaderboards } from '@globalleaderboards/sdk'
+import {GlobalLeaderboards} from '@globalleaderboards/sdk'
 
 // Initialize the SDK
 const leaderboard = new GlobalLeaderboards('your-api-key')
@@ -40,7 +44,9 @@ const scores = await leaderboard.getLeaderboard('your-leaderboard-id', {
 })
 
 // Connect to real-time updates
-const ws = leaderboard.connectWebSocket({
+
+// Recommended: Server-Sent Events (simpler, auto-reconnect, firewall-friendly)
+const sse = leaderboard.connectSSE('your-leaderboard-id', {
   onLeaderboardUpdate: (data) => {
     console.log('Leaderboard updated:', data)
   },
@@ -49,15 +55,25 @@ const ws = leaderboard.connectWebSocket({
   }
 })
 
-// Subscribe to a specific leaderboard
+// Alternative: WebSocket (only use if you specifically need WebSocket compatibility)
+// Note: Currently only receives updates, doesn't send data to server
+const ws = leaderboard.connectWebSocket({
+  onLeaderboardUpdate: (data) => {
+    console.log('Leaderboard updated:', data)
+  },
+  onUserRankUpdate: (data) => {
+    console.log('Rank changed:', data)
+  }
+})
 ws.subscribe('your-leaderboard-id')
+
 ```
 
 ## Features
 
 - 🚀 **Simple API** - Get started in minutes
 - 🌍 **Global Performance** - <100ms response times worldwide
-- 🔄 **Real-time Updates** - WebSocket support for live leaderboards
+- 🔄 **Real-time Updates** - WebSocket and SSE support for live leaderboards
 - 🛡️ **Type Safe** - Full TypeScript support
 - 🔒 **Secure** - API key authentication with rate limiting
 - 🎮 **Game Ready** - Built for games and competitive applications
@@ -68,16 +84,19 @@ ws.subscribe('your-leaderboard-id')
 ### Constructor
 
 ```javascript
-const leaderboard = new GlobalLeaderboards(apiKey, options?)
+const leaderboard = new GlobalLeaderboards(apiKey, options)
 ```
 
 **Parameters:**
+
 - `apiKey` (string, required) - Your API key from GlobalLeaderboards.net
 - `options` (object, optional) - Configuration options
 
 **Options:**
+
 - `appId` (string) - Optional application ID to restrict operations
-- `baseUrl` (string) - API base URL (default: `https://api.globalleaderboards.net`)
+- `baseUrl` (string) - API base URL (default:
+  `https://api.globalleaderboards.net`)
 - `wsUrl` (string) - WebSocket URL (default: `wss://api.globalleaderboards.net`)
 - `timeout` (number) - Request timeout in ms (default: `30000`)
 - `autoRetry` (boolean) - Enable automatic retry (default: `true`)
@@ -93,17 +112,19 @@ Submit a score to a leaderboard with validation.
 const result = await leaderboard.submit('user-123', 1500, {
   leaderboardId: 'leaderboard-456',
   userName: 'PlayerOne',
-  metadata: { level: 5, character: 'warrior' }
+  metadata: {level: 5, character: 'warrior'}
 })
 
 // Returns: { operation: 'insert', rank: 42, previous_score?: 1000, improvement?: 500 }
 ```
 
 **Parameters:**
+
 - `userId` (string) - Unique user identifier
 - `score` (number) - Score value (must be >= 0)
 - `options.leaderboardId` (string) - Target leaderboard ID
-- `options.userName` (string) - Display name (1-50 chars, alphanumeric + accents)
+- `options.userName` (string) - Display name (1-50 chars, alphanumeric +
+  accents)
 - `options.metadata` (object) - Optional metadata
 
 #### submitScore(playerId, score, leaderboardId?, options?)
@@ -158,6 +179,7 @@ const data = await leaderboard.getLeaderboard('leaderboard-456', {
 ```
 
 **Options:**
+
 - `page` (number) - Page number (default: 1)
 - `limit` (number) - Results per page (default: 20, max: 100)
 - `aroundUser` (string) - Center results around specific user
@@ -208,7 +230,71 @@ const info = await leaderboard.getApiInfo()
 // Returns API version, endpoints, documentation URL, etc.
 ```
 
+### Server-Sent Events (SSE) Methods
+
+Server-Sent Events provide a simpler alternative to WebSocket for receiving
+real-time updates. SSE is ideal when you only need to receive updates from the
+server (one-way communication).
+
+#### connectSSE(leaderboardId, handlers, options?)
+
+Connect to a leaderboard's SSE stream for real-time updates.
+
+```javascript
+const connection = leaderboard.connectSSE('leaderboard-456', {
+  onConnect: () => {
+    console.log('SSE connected')
+  },
+  onLeaderboardUpdate: (data) => {
+    console.log('Leaderboard updated:', data.topScores)
+    console.log('Total entries:', data.totalEntries)
+  },
+  onUserRankUpdate: (data) => {
+    console.log(`${data.userName} moved from rank ${data.previousRank} to ${data.newRank}`)
+  },
+  onError: (error) => {
+    console.error('SSE error:', error)
+  },
+  onDisconnect: () => {
+    console.log('SSE disconnected')
+  }
+}, {
+  userId: 'user-123',              // For personalized updates
+  includeMetadata: true,           // Include metadata in updates
+  topN: 10                         // Number of top scores in refresh events
+})
+
+// Later: close the connection
+connection.close()
+```
+
+**Event Handlers (same as WebSocket):**
+
+- `onConnect` - Connection established
+- `onDisconnect` - Connection closed
+- `onError` - Error occurred
+- `onLeaderboardUpdate` - Leaderboard data changed (new scores, refresh, etc.)
+- `onUserRankUpdate` - User's rank changed
+- `onHeartbeat` - Keep-alive signal from server (optional)
+- `onMessage` - Raw message handler (optional)
+
+**Options:**
+
+- `userId` - User ID for personalized rank updates
+- `includeMetadata` - Include metadata in score updates (default: true)
+- `topN` - Number of top scores to include in refresh events (default: 10)
+
+#### disconnectSSE()
+
+Disconnect all SSE connections.
+
+```javascript
+leaderboard.disconnectSSE()
+```
+
 ### WebSocket Methods
+
+**Note:** The current WebSocket implementation only supports receiving updates from the server. It does not provide methods to send custom data to the server, making it functionally equivalent to SSE but with more complexity. For this reason, **we recommend using SSE instead** unless you specifically need WebSocket for compatibility reasons.
 
 #### connectWebSocket(handlers, options?)
 
@@ -231,6 +317,7 @@ const ws = leaderboard.connectWebSocket({
 ```
 
 **Handlers:**
+
 - `onConnect` - Called when connection is established
 - `onDisconnect` - Called when connection is closed
 - `onError` - Called on errors
@@ -273,6 +360,43 @@ Close the WebSocket connection.
 ```javascript
 ws.disconnect()
 ```
+
+### SSE vs WebSocket
+
+Choose the right real-time technology for your use case:
+
+| Feature           | SSE                     | WebSocket                |
+|-------------------|-------------------------|--------------------------|
+| Communication     | One-way (server→client) | Two-way (bidirectional)* |
+| Complexity        | Simple                  | More complex             |
+| Browser Support   | Excellent               | Good                     |
+| Auto-reconnect    | Built-in                | Manual                   |
+| Firewall Friendly | Yes                     | Sometimes blocked        |
+| Use Case          | Display updates         | Interactive features*    |
+
+*Note: The current WebSocket implementation only receives data and doesn't send commands to the server.
+
+**Why SSE is Recommended:**
+
+Since our WebSocket implementation currently only receives updates (no sending capabilities), SSE provides the same functionality with:
+- Simpler implementation
+- Automatic reconnection
+- Better firewall/proxy compatibility
+- Lower resource usage
+- Easier debugging
+
+**Use SSE (recommended) when:**
+
+- You need real-time leaderboard updates
+- You want the simplest integration
+- Firewall/proxy compatibility is important
+- You're building a display-only leaderboard
+
+**Use WebSocket when:**
+
+- You specifically need WebSocket for compatibility with existing infrastructure
+- You're already using WebSocket elsewhere in your application
+- Future bidirectional features are planned (not currently available)
 
 ### Utility Methods
 
@@ -320,12 +444,15 @@ try {
 The SDK is written in TypeScript and provides full type definitions:
 
 ```typescript
-import { 
+import {
   GlobalLeaderboards,
   SubmitScoreResponse,
   LeaderboardEntriesResponse,
   LeaderboardEntry,
-  GlobalLeaderboardsError
+  GlobalLeaderboardsError,
+  SSEScoreUpdateEvent,
+  SSELeaderboardRefreshEvent,
+  SSEEventHandlers
 } from '@globalleaderboards/sdk'
 
 // All methods are fully typed
@@ -346,36 +473,105 @@ const response: SubmitScoreResponse = await leaderboard.submit(
 ### React Hook Example
 
 ```javascript
-import { useEffect, useState } from 'react'
-import { GlobalLeaderboards } from '@globalleaderboards/sdk'
+import {useEffect, useState} from 'react'
+import {GlobalLeaderboards} from '@globalleaderboards/sdk'
 
 function useLeaderboard(leaderboardId) {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
-  
+
   const leaderboard = new GlobalLeaderboards(process.env.REACT_APP_API_KEY)
-  
+
   useEffect(() => {
     // Fetch initial data
-    leaderboard.getLeaderboard(leaderboardId, { limit: 10 })
+    leaderboard.getLeaderboard(leaderboardId, {limit: 10})
       .then(data => {
         setEntries(data.data)
         setLoading(false)
       })
-    
+
     // Connect to real-time updates
     const ws = leaderboard.connectWebSocket({
       onLeaderboardUpdate: (data) => {
         setEntries(data.entries)
       }
     })
-    
+
     ws.subscribe(leaderboardId)
-    
+
     return () => ws.disconnect()
   }, [leaderboardId])
-  
-  return { entries, loading }
+
+  return {entries, loading}
+}
+```
+
+### SSE Real-time Display Example
+
+```javascript
+import {GlobalLeaderboards} from '@globalleaderboards/sdk'
+
+function LeaderboardDisplay({leaderboardId}) {
+  const [scores, setScores] = useState([])
+  const [latestScore, setLatestScore] = useState(null)
+
+  useEffect(() => {
+    const leaderboard = new GlobalLeaderboards(process.env.REACT_APP_API_KEY)
+
+    // Connect to SSE for real-time updates
+    const connection = leaderboard.connectSSE(leaderboardId, {
+      onConnect: () => {
+        console.log('Connected to real-time updates')
+      },
+      onLeaderboardUpdate: (data) => {
+        // Update the leaderboard display
+        setScores(data.topScores)
+
+        // Show the latest score if available
+        if (data.topScores.length > 0) {
+          const newestScore = data.topScores[0]
+          setLatestScore(newestScore)
+        }
+      },
+      onUserRankUpdate: (data) => {
+        // Handle user rank changes if needed
+        console.log(`User ${data.userName} rank changed to ${data.newRank}`)
+      },
+      onError: (error) => {
+        console.error('Real-time connection error:', error)
+      }
+    }, {
+      topN: 10  // We're displaying top 10
+    })
+
+    // Fetch initial leaderboard
+    const fetchLeaderboard = async () => {
+      const data = await leaderboard.getLeaderboard(leaderboardId, {limit: 10})
+      setScores(data.data)
+    }
+
+    fetchLeaderboard()
+
+    // Cleanup on unmount
+    return () => connection.close()
+  }, [leaderboardId])
+
+  return (
+    <div>
+      {latestScore && (
+        <div className="latest-score">
+          New Score: {latestScore.userName} - {latestScore.score}
+        </div>
+      )}
+      <div className="leaderboard">
+        {scores.map((entry, index) => (
+          <div key={entry.userId}>
+            #{entry.rank} {entry.userName} - {entry.score}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 ```
 
@@ -387,7 +583,7 @@ class GameLeaderboard {
     this.client = new GlobalLeaderboards(apiKey)
     this.leaderboardId = 'game-highscores'
   }
-  
+
   async submitGameScore(playerId, playerName, score, level) {
     try {
       const result = await this.client.submit(playerId, score, {
@@ -399,20 +595,20 @@ class GameLeaderboard {
           version: '1.0.0'
         }
       })
-      
+
       if (result.operation === 'update' && result.improvement > 0) {
         console.log(`New personal best! Improved by ${result.improvement} points`)
       }
-      
+
       return result
     } catch (error) {
       console.error('Failed to submit score:', error.message)
       throw error
     }
   }
-  
+
   async getTopPlayers(limit = 10) {
-    const data = await this.client.getLeaderboard(this.leaderboardId, { limit })
+    const data = await this.client.getLeaderboard(this.leaderboardId, {limit})
     return data.data
   }
 }
@@ -420,26 +616,27 @@ class GameLeaderboard {
 
 ## API Rate Limits
 
-The SDK automatically handles rate limiting and retries:
+The SDK automatically handles rate limiting and retries. The current rate
+limit is 1,000 requests/minute.
 
-- **Free tier**: 1,000 requests/minute
-- **Pro tier**: 10,000 requests/minute
-- **Enterprise**: Custom limits
-
-When rate limited, the SDK will automatically retry with exponential backoff if `autoRetry` is enabled.
+When rate limited, the SDK will automatically retry with exponential backoff
+if `autoRetry` is enabled.
 
 ## Best Practices
 
 1. **Reuse SDK instances** - Create one instance and reuse it
 2. **Handle errors gracefully** - Always wrap API calls in try-catch
-3. **Use metadata wisely** - Store game-specific data like level, character, etc.
-4. **Validate client-side** - The SDK validates scores and usernames automatically
+3. **Use metadata wisely** - Store game-specific data like level, character,
+   etc.
+4. **Validate client-side** - The SDK validates scores and usernames
+   automatically
 5. **Subscribe to updates** - Use WebSocket for real-time leaderboards
 6. **Generate IDs** - Use `generateId()` for consistent ID format
 
 ## Documentation
 
-Full API documentation is available at [docs.globalleaderboards.net](https://docs.globalleaderboards.net)
+Full API documentation is available
+at [docs.globalleaderboards.net](https://docs.globalleaderboards.net)
 
 ## Support
 
@@ -449,4 +646,4 @@ Full API documentation is available at [docs.globalleaderboards.net](https://doc
 
 ## License
 
-MIT
+[MIT](./LICENSE)

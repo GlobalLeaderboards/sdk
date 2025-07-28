@@ -15,9 +15,11 @@ import {
   WebSocketHandlers
 } from './types'
 import { LeaderboardWebSocket } from './websocket'
+import { LeaderboardSSE } from './sse'
 
 export * from './types'
-export { LeaderboardWebSocket }
+export * from './sse'
+export { LeaderboardWebSocket, LeaderboardSSE }
 
 /**
  * GlobalLeaderboards SDK client for interacting with the GlobalLeaderboards.net API
@@ -30,6 +32,7 @@ export { LeaderboardWebSocket }
 export class GlobalLeaderboards {
   private readonly config: Required<GlobalLeaderboardsConfig>
   private wsClient: LeaderboardWebSocket | null = null
+  private sseClient: LeaderboardSSE | null = null
 
   /**
    * Create a new GlobalLeaderboards SDK instance
@@ -282,6 +285,11 @@ export class GlobalLeaderboards {
   /**
    * Connect to WebSocket for real-time leaderboard updates
    * 
+   * @deprecated Consider using `connectSSE()` instead. SSE provides the same real-time
+   * updates with simpler implementation, automatic reconnection, and better firewall 
+   * compatibility. The current WebSocket implementation only receives data from the 
+   * server and does not support sending data back.
+   * 
    * @param handlers - Event handlers for WebSocket events
    * @param handlers.onConnect - Called when connection is established
    * @param handlers.onDisconnect - Called when connection is closed
@@ -305,6 +313,8 @@ export class GlobalLeaderboards {
    *   leaderboardId: 'leaderboard-456'
    * })
    * ```
+   * 
+   * @see connectSSE - Recommended alternative for real-time updates
    */
   connectWebSocket(
     handlers: WebSocketHandlers,
@@ -346,6 +356,72 @@ export class GlobalLeaderboards {
     if (this.wsClient) {
       this.wsClient.disconnect()
       this.wsClient = null
+    }
+  }
+
+  /**
+   * Connect to Server-Sent Events (SSE) for real-time leaderboard updates
+   * 
+   * This is the recommended method for real-time updates. SSE provides:
+   * - Simpler implementation compared to WebSocket
+   * - Automatic reconnection with exponential backoff
+   * - Better firewall and proxy compatibility
+   * - Lower resource usage
+   * - Built-in heartbeat for connection health
+   * 
+   * @param leaderboardId - Leaderboard to connect to
+   * @param handlers - Event handlers for SSE events
+   * @param handlers.onConnect - Called when connection is established
+   * @param handlers.onDisconnect - Called when connection is closed
+   * @param handlers.onError - Called on errors
+   * @param handlers.onLeaderboardUpdate - Called when leaderboard data changes
+   * @param handlers.onUserRankUpdate - Called when user's rank changes
+   * @param handlers.onHeartbeat - Called on heartbeat (optional)
+   * @param handlers.onMessage - Raw message handler (optional)
+   * @param options - Connection options
+   * @param options.userId - User ID for personalized updates
+   * @param options.includeMetadata - Include metadata in updates (default: true)
+   * @param options.topN - Number of top scores to include in refresh events (default: 10)
+   * @returns SSE connection object with close method
+   * 
+   * @example
+   * ```typescript
+   * const connection = leaderboard.connectSSE('leaderboard-123', {
+   *   onLeaderboardUpdate: (data) => {
+   *     console.log('Top scores:', data.topScores)
+   *   },
+   *   onUserRankUpdate: (data) => {
+   *     console.log('Rank changed:', data)
+   *   }
+   * })
+   * 
+   * // Later...
+   * connection.close()
+   * ```
+   */
+  connectSSE(
+    leaderboardId: string,
+    handlers: import('./sse').SSEEventHandlers,
+    options?: import('./sse').SSEConnectionOptions
+  ): { close: () => void } {
+    if (!this.sseClient) {
+      this.sseClient = new LeaderboardSSE(this.config)
+    }
+    return this.sseClient.connect(leaderboardId, handlers, options)
+  }
+
+  /**
+   * Disconnect from all SSE connections
+   * 
+   * @example
+   * ```typescript
+   * leaderboard.disconnectSSE()
+   * ```
+   */
+  disconnectSSE(): void {
+    if (this.sseClient) {
+      this.sseClient.disconnectAll()
+      this.sseClient = null
     }
   }
 

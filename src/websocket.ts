@@ -11,6 +11,13 @@ import {
 
 /**
  * WebSocket client for real-time leaderboard updates
+ * 
+ * @deprecated Consider using LeaderboardSSE instead. The current WebSocket implementation
+ * only receives data from the server and does not support bidirectional communication.
+ * SSE provides the same functionality with simpler implementation, automatic reconnection,
+ * and better firewall compatibility.
+ * 
+ * @see LeaderboardSSE - Recommended alternative for real-time updates
  */
 export class LeaderboardWebSocket {
   private ws: WebSocket | null = null
