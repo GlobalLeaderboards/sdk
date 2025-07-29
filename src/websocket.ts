@@ -227,6 +227,19 @@ export class LeaderboardWebSocket {
       case 'ping':
         this.send({ type: 'pong' })
         break
+        
+      case 'connection_info':
+        // Connection info is informational, just log it
+        console.debug('[WebSocket] Connection info received:', message)
+        break
+        
+      case 'update':
+      case 'score_submission':
+        // These are handled via onMessage handler
+        break
+        
+      default:
+        console.warn('[WebSocket] Unknown message type:', message.type)
     }
   }
 

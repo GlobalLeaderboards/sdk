@@ -175,6 +175,9 @@ export type WebSocketMessageType =
   | 'leaderboard_update'
   | 'user_rank_update'
   | 'error'
+  | 'connection_info'
+  | 'update'
+  | 'score_submission'
 
 /**
  * Base WebSocket message
@@ -239,6 +242,22 @@ export interface ErrorMessage extends WebSocketMessage {
     code: string
     message: string
     details?: Record<string, unknown>
+  }
+}
+
+/**
+ * Connection info message
+ */
+export interface ConnectionInfoMessage extends WebSocketMessage {
+  type: 'connection_info'
+  payload?: {
+    connectionId: string
+    maxConnections: number
+    currentConnections: number
+    rateLimit?: {
+      requestsPerMinute: number
+      burstSize: number
+    }
   }
 }
 
