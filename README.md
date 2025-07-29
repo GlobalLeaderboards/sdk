@@ -59,7 +59,10 @@ const sse = leaderboard.connectSSE('your-leaderboard-id', {
 // Note: Currently only receives updates, doesn't send data to server
 const ws = leaderboard.connectWebSocket({
   onLeaderboardUpdate: (data) => {
-    console.log('Leaderboard updated:', data)
+    // New enhanced format with full state and mutations
+    console.log('Full leaderboard:', data.leaderboard.entries) // Top 100 entries
+    console.log('What changed:', data.mutations) // Array of changes
+    console.log('Triggered by:', data.trigger) // What caused the update
   },
   onUserRankUpdate: (data) => {
     console.log('Rank changed:', data)
@@ -268,7 +271,7 @@ const connection = leaderboard.connectSSE('leaderboard-456', {
 connection.close()
 ```
 
-**Event Handlers (same as WebSocket):**
+**Event Handlers:**
 
 - `onConnect` - Connection established
 - `onDisconnect` - Connection closed
@@ -321,9 +324,122 @@ const ws = leaderboard.connectWebSocket({
 - `onConnect` - Called when connection is established
 - `onDisconnect` - Called when connection is closed
 - `onError` - Called on errors
-- `onLeaderboardUpdate` - Called when leaderboard data changes
+- `onLeaderboardUpdate` - Called when leaderboard data changes (see Enhanced Message Format below)
 - `onUserRankUpdate` - Called when user's rank changes
 - `onMessage` - Called for any WebSocket message
+
+#### Enhanced WebSocket Message Format
+
+**New in v0.5.27**: The `onLeaderboardUpdate` handler now receives an enhanced message format with full leaderboard state and detailed mutations:
+
+```javascript
+{
+  leaderboardId: "01K1AKF9NMZFX8FK8XA81QYK2J",
+  updateType: "score_update", // or "full_refresh", "bulk_update"
+  
+  // Complete current state (top 100 entries)
+  leaderboard: {
+    entries: [
+      {
+        rank: 1,
+        userId: "user123",
+        userName: "Alice",
+        score: 1000,
+        timestamp: "2025-07-29T08:15:37.197Z",
+        metadata: { /* custom data */ }
+      },
+      // ... up to 100 entries
+    ],
+    totalEntries: 150,
+    displayedEntries: 100
+  },
+  
+  // What changed (for animations)
+  mutations: [
+    {
+      type: "new_entry",
+      userId: "user456",
+      newRank: 3,
+      score: 850,
+      userName: "Bob"
+    },
+    {
+      type: "rank_change",
+      userId: "user789",
+      previousRank: 3,
+      newRank: 4,
+      score: 800
+    },
+    {
+      type: "score_update",
+      userId: "user123",
+      previousScore: 950,
+      newScore: 1000,
+      previousRank: 2,
+      newRank: 1
+    },
+    {
+      type: "username_change",
+      userId: "user111",
+      previousUsername: "Player111",
+      newUsername: "ProPlayer",
+      rank: 5
+    },
+    {
+      type: "removed",
+      userId: "user999",
+      previousRank: 100,
+      score: 100
+    }
+  ],
+  
+  // What triggered this update
+  trigger: {
+    type: "score_submission", // or "bulk_submission", "admin_action", "leaderboard_reset"
+    submissions: [
+      {
+        userId: "user123",
+        userName: "Alice",
+        score: 1000,
+        previousScore: 950,
+        timestamp: "2025-07-29T08:15:37.197Z"
+      }
+    ]
+  },
+  
+  sequence: 42 // For ordering/deduplication
+}
+```
+
+**Mutation Types:**
+- `new_entry` - User wasn't on the leaderboard before
+- `rank_change` - User's rank changed (but score didn't)
+- `score_update` - User's score changed (may also change rank)
+- `username_change` - User's display name changed
+- `removed` - User dropped out of displayed entries
+
+**Using Mutations for Animations:**
+```javascript
+ws.onLeaderboardUpdate = (data) => {
+  // Update display with full state
+  updateLeaderboard(data.leaderboard.entries)
+  
+  // Animate changes
+  data.mutations.forEach(mutation => {
+    switch(mutation.type) {
+      case 'new_entry':
+        animateNewEntry(mutation.userId, mutation.newRank)
+        break
+      case 'rank_change':
+        animateRankChange(mutation.userId, mutation.previousRank, mutation.newRank)
+        break
+      case 'score_update':
+        animateScoreUpdate(mutation.userId, mutation.previousScore, mutation.newScore)
+        break
+    }
+  })
+}
+```
 
 #### disconnectWebSocket()
 
@@ -452,7 +568,16 @@ import {
   GlobalLeaderboardsError,
   SSEScoreUpdateEvent,
   SSELeaderboardRefreshEvent,
-  SSEEventHandlers
+  SSEEventHandlers,
+  // New WebSocket types
+  LeaderboardUpdateMessage,
+  LeaderboardMutation,
+  NewEntryMutation,
+  RankChangeMutation,
+  ScoreUpdateMutation,
+  UsernameChangeMutation,
+  RemovedMutation,
+  UpdateTrigger
 } from '@globalleaderboards/sdk'
 
 // All methods are fully typed
@@ -466,6 +591,16 @@ const response: SubmitScoreResponse = await leaderboard.submit(
     userName: 'Player'
   }
 )
+
+// TypeScript will provide full IntelliSense for mutations
+ws.onLeaderboardUpdate = (data: LeaderboardUpdateMessage['payload']) => {
+  data.mutations.forEach((mutation: LeaderboardMutation) => {
+    if (mutation.type === 'new_entry') {
+      // TypeScript knows this is NewEntryMutation
+      console.log(mutation.newRank)
+    }
+  })
+}
 ```
 
 ## Examples
@@ -493,7 +628,17 @@ function useLeaderboard(leaderboardId) {
     // Connect to real-time updates
     const ws = leaderboard.connectWebSocket({
       onLeaderboardUpdate: (data) => {
-        setEntries(data.entries)
+        // New format provides full leaderboard state
+        setEntries(data.leaderboard.entries)
+        
+        // Optionally use mutations for animations
+        data.mutations.forEach(mutation => {
+          if (mutation.type === 'new_entry') {
+            // Animate new entry appearing
+          } else if (mutation.type === 'rank_change') {
+            // Animate rank movement
+          }
+        })
       }
     })
 

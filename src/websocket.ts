@@ -210,7 +210,7 @@ export class LeaderboardWebSocket {
     switch (message.type) {
       case 'leaderboard_update':
         this.handlers.onLeaderboardUpdate?.(
-          (message as LeaderboardUpdateMessage).data
+          (message as LeaderboardUpdateMessage).payload
         )
         break
       

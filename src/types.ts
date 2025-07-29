@@ -204,18 +204,117 @@ export interface UnsubscribeMessage extends WebSocketMessage {
 }
 
 /**
- * Leaderboard update message
+ * Mutation types for leaderboard changes
+ */
+export type MutationType = 'new_entry' | 'rank_change' | 'score_update' | 'username_change' | 'removed'
+
+/**
+ * Base mutation interface
+ */
+export interface BaseMutation {
+  type: MutationType
+  userId: string
+}
+
+/**
+ * New entry mutation
+ */
+export interface NewEntryMutation extends BaseMutation {
+  type: 'new_entry'
+  newRank: number
+  score: number
+  userName: string
+}
+
+/**
+ * Rank change mutation
+ */
+export interface RankChangeMutation extends BaseMutation {
+  type: 'rank_change'
+  previousRank: number
+  newRank: number
+  score: number
+}
+
+/**
+ * Score update mutation
+ */
+export interface ScoreUpdateMutation extends BaseMutation {
+  type: 'score_update'
+  previousScore: number
+  newScore: number
+  previousRank: number
+  newRank: number
+}
+
+/**
+ * Username change mutation
+ */
+export interface UsernameChangeMutation extends BaseMutation {
+  type: 'username_change'
+  previousUsername: string
+  newUsername: string
+  rank: number
+}
+
+/**
+ * Removed mutation
+ */
+export interface RemovedMutation extends BaseMutation {
+  type: 'removed'
+  previousRank: number
+  score: number
+}
+
+/**
+ * Union type for all mutations
+ */
+export type LeaderboardMutation = 
+  | NewEntryMutation
+  | RankChangeMutation
+  | ScoreUpdateMutation
+  | UsernameChangeMutation
+  | RemovedMutation
+
+/**
+ * Update trigger information
+ */
+export interface UpdateTrigger {
+  type: 'score_submission' | 'bulk_submission' | 'admin_action' | 'leaderboard_reset'
+  submissions?: Array<{
+    userId: string
+    userName: string
+    score: number
+    previousScore?: number
+    timestamp: string
+  }>
+}
+
+/**
+ * Leaderboard update message with full state and mutations
  */
 export interface LeaderboardUpdateMessage extends WebSocketMessage {
   type: 'leaderboard_update'
-  data: {
-    leaderboard_id: string
-    entries: LeaderboardEntry[]
-    changes?: {
-      added: string[]
-      updated: string[]
-      removed: string[]
+  id: string
+  timestamp: string
+  payload: {
+    leaderboardId: string
+    updateType: 'score_update' | 'full_refresh' | 'bulk_update'
+    
+    // Complete current state (top 100 entries)
+    leaderboard: {
+      entries: LeaderboardEntry[]
+      totalEntries: number
+      displayedEntries: number
     }
+    
+    // What changed
+    mutations: LeaderboardMutation[]
+    
+    // What triggered this update
+    trigger: UpdateTrigger
+    
+    sequence: number // For ordering/deduplication
   }
 }
 
@@ -393,7 +492,7 @@ export interface WebSocketHandlers {
   /** Called when an error occurs */
   onError?: (error: Error) => void
   /** Called when leaderboard is updated */
-  onLeaderboardUpdate?: (data: LeaderboardUpdateMessage['data']) => void
+  onLeaderboardUpdate?: (data: LeaderboardUpdateMessage['payload']) => void
   /** Called when user rank changes */
   onUserRankUpdate?: (data: UserRankUpdateMessage['data']) => void
   /** Called for any message */
