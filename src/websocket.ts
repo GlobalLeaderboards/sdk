@@ -27,6 +27,7 @@ export class LeaderboardWebSocket {
   private handlers: WebSocketHandlers
   private isConnecting = false
   private shouldReconnect = true
+  private permanentError: GlobalLeaderboardsError | null = null
   
   constructor(
     private readonly wsUrl: string,
@@ -56,6 +57,7 @@ export class LeaderboardWebSocket {
 
     this.isConnecting = true
     this.shouldReconnect = true
+    this.permanentError = null // Reset any previous permanent error
 
     const params = new URLSearchParams({
       api_key: this.apiKey
@@ -103,11 +105,8 @@ export class LeaderboardWebSocket {
 
     const message: SubscribeMessage = {
       type: 'subscribe',
-      leaderboard_id: leaderboardId
-    }
-
-    if (userId) {
-      message.user_id = userId
+      leaderboard_id: leaderboardId,
+      user_id: userId
     }
 
     this.send(message)
@@ -150,6 +149,13 @@ export class LeaderboardWebSocket {
    */
   get subscriptions(): string[] {
     return Array.from(this.subscribedLeaderboards)
+  }
+
+  /**
+   * Get permanent error if connection was terminated due to a permanent error
+   */
+  get permanentConnectionError(): GlobalLeaderboardsError | null {
+    return this.permanentError
   }
 
   private setupEventHandlers(): void {
@@ -216,16 +222,40 @@ export class LeaderboardWebSocket {
       
       case 'error':
         const errorMsg = message as ErrorMessage
+        console.log('[WebSocket] Error message received:', errorMsg)
+        console.log('[WebSocket] Error object:', errorMsg.error)
+        
         if (errorMsg.error && typeof errorMsg.error === 'object' && 'message' in errorMsg.error) {
-          this.handleError(
-            new GlobalLeaderboardsError(
-              errorMsg.error.message,
-              errorMsg.error.code || 'UNKNOWN_ERROR'
-            )
+          const error = new GlobalLeaderboardsError(
+            errorMsg.error.message,
+            errorMsg.error.code || 'UNKNOWN_ERROR'
           )
+          
+          // Check if this is a permanent error that shouldn't trigger reconnection
+          const permanentErrors = [
+            'LEADERBOARD_NOT_FOUND',
+            'INVALID_API_KEY',
+            'INSUFFICIENT_PERMISSIONS',
+            'INVALID_LEADERBOARD_ID'
+          ]
+          
+          if (permanentErrors.includes(error.code)) {
+            // Permanent error - stop reconnection attempts
+            this.shouldReconnect = false
+            this.permanentError = error
+            console.error('[WebSocket] Permanent error detected, disabling reconnection:', error.code)
+            
+            // Close the connection immediately
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+              this.ws.close(4000, `Permanent error: ${error.code}`)
+            }
+          }
+          
+          this.handleError(error)
         } else {
           // Handle invalid error format
           console.error('[WebSocket] Invalid error message format:', errorMsg)
+          console.error('[WebSocket] Expected error object with message and code, got:', errorMsg.error)
           this.handleError(
             new GlobalLeaderboardsError(
               'Invalid error message format',
@@ -237,6 +267,11 @@ export class LeaderboardWebSocket {
       
       case 'ping':
         this.send({ type: 'pong' })
+        break
+        
+      case 'pong':
+        // Pong received in response to our ping - no action needed
+        console.debug('[WebSocket] Pong received')
         break
         
       case 'connection_info':
@@ -262,7 +297,56 @@ export class LeaderboardWebSocket {
       )
     }
 
-    this.ws.send(JSON.stringify(message))
+    // Transform SDK message format to server format
+    const serverMessage = this.transformToServerFormat(message)
+    this.ws.send(JSON.stringify(serverMessage))
+  }
+
+  private transformToServerFormat(message: WebSocketMessage): any {
+    // Generate message ID and timestamp
+    const id = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+    const timestamp = new Date().toISOString()
+
+    switch (message.type) {
+      case 'subscribe':
+        const subMsg = message as SubscribeMessage
+        return {
+          id,
+          type: 'subscribe',
+          timestamp,
+          payload: {
+            leaderboardId: subMsg.leaderboard_id,
+            userId: subMsg.user_id
+          }
+        }
+      
+      case 'unsubscribe':
+        const unsubMsg = message as UnsubscribeMessage
+        return {
+          id,
+          type: 'unsubscribe',
+          timestamp,
+          payload: {
+            leaderboardId: unsubMsg.leaderboard_id
+          }
+        }
+      
+      case 'ping':
+      case 'pong':
+        return {
+          id,
+          type: message.type,
+          timestamp
+        }
+      
+      default:
+        // For other message types, just add id and timestamp
+        return {
+          id,
+          timestamp,
+          ...message
+        }
+    }
   }
 
   private startPingInterval(): void {
