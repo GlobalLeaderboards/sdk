@@ -1,4 +1,5 @@
 import { ulid } from 'ulid'
+import { version as SDK_VERSION } from '../package.json'
 import {
   GlobalLeaderboardsConfig,
   SubmitScoreRequest,
@@ -33,6 +34,7 @@ export class GlobalLeaderboards {
   private readonly config: Required<GlobalLeaderboardsConfig>
   private wsClient: LeaderboardWebSocket | null = null
   private sseClient: LeaderboardSSE | null = null
+  readonly version: string = SDK_VERSION
 
   /**
    * Create a new GlobalLeaderboards SDK instance
