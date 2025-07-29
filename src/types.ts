@@ -235,17 +235,24 @@ export interface UserRankUpdateMessage extends WebSocketMessage {
  */
 export interface ErrorMessage extends WebSocketMessage {
   type: 'error'
-  code: string
-  message: string
+  error: {
+    code: string
+    message: string
+    details?: Record<string, unknown>
+  }
 }
 
 /**
  * API error response
  */
 export interface ApiErrorResponse {
-  error: string
-  message: string
-  details?: Record<string, unknown>
+  error: {
+    code: string
+    message: string
+    details?: Record<string, unknown>
+  }
+  timestamp: string
+  requestId?: string
 }
 
 /**

@@ -678,10 +678,10 @@ export class GlobalLeaderboards {
       if (!response.ok) {
         const errorData = await response.json() as ApiErrorResponse
         throw new GlobalLeaderboardsError(
-          errorData.message || `HTTP ${response.status}`,
-          errorData.error || 'HTTP_ERROR',
+          errorData.error.message || `HTTP ${response.status}`,
+          errorData.error.code || 'HTTP_ERROR',
           response.status,
-          errorData.details
+          errorData.error.details
         )
       }
 

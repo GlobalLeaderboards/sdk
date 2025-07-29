@@ -63,6 +63,8 @@ export class LeaderboardWebSocket {
     
     if (leaderboardId) {
       params.append('leaderboard_id', leaderboardId)
+      // Add to subscribed list so we don't re-subscribe after connection
+      this.subscribedLeaderboards.add(leaderboardId)
     }
     
     if (userId) {
@@ -160,8 +162,15 @@ export class LeaderboardWebSocket {
       this.handlers.onConnect?.()
       
       // Re-subscribe to leaderboards after reconnection
+      // Skip if leaderboard was already provided in connection URL
+      const urlParams = this.ws ? new URL(this.ws.url).searchParams : null
+      const connectedLeaderboardId = urlParams?.get('leaderboard_id')
+      
       this.subscribedLeaderboards.forEach(leaderboardId => {
-        this.subscribe(leaderboardId)
+        // Don't re-subscribe to the leaderboard we're already connected to
+        if (leaderboardId !== connectedLeaderboardId) {
+          this.subscribe(leaderboardId)
+        }
       })
     }
 
@@ -209,8 +218,8 @@ export class LeaderboardWebSocket {
         const errorMsg = message as ErrorMessage
         this.handleError(
           new GlobalLeaderboardsError(
-            errorMsg.message,
-            errorMsg.code
+            errorMsg.error.message,
+            errorMsg.error.code
           )
         )
         break

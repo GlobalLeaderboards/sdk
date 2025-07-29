@@ -238,8 +238,8 @@ export class LeaderboardSSE {
       eventSource.addEventListener('error', (event: MessageEvent) => {
         try {
           const data = JSON.parse(event.data)
-          const error = new Error(data.message) as GlobalLeaderboardsError
-          error.code = data.code
+          const error = new Error(data.error.message) as GlobalLeaderboardsError
+          error.code = data.error.code
           handlers.onError?.(error)
         } catch (error) {
           console.error('[LeaderboardSSE] Failed to parse error event:', error)
