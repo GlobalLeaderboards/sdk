@@ -216,12 +216,23 @@ export class LeaderboardWebSocket {
       
       case 'error':
         const errorMsg = message as ErrorMessage
-        this.handleError(
-          new GlobalLeaderboardsError(
-            errorMsg.error.message,
-            errorMsg.error.code
+        if (errorMsg.error && typeof errorMsg.error === 'object' && 'message' in errorMsg.error) {
+          this.handleError(
+            new GlobalLeaderboardsError(
+              errorMsg.error.message,
+              errorMsg.error.code || 'UNKNOWN_ERROR'
+            )
           )
-        )
+        } else {
+          // Handle invalid error format
+          console.error('[WebSocket] Invalid error message format:', errorMsg)
+          this.handleError(
+            new GlobalLeaderboardsError(
+              'Invalid error message format',
+              'INVALID_MESSAGE_FORMAT'
+            )
+          )
+        }
         break
       
       case 'ping':
