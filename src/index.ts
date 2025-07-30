@@ -13,14 +13,20 @@ import {
   DetailedHealthResponse,
   ApiErrorResponse,
   GlobalLeaderboardsError,
-  WebSocketHandlers
+  WebSocketHandlers,
+  QueuedSubmitResponse,
+  FlexibleScoreSubmission,
+  QueueEventType,
+  QueueEventHandler
 } from './types'
 import { LeaderboardWebSocket } from './websocket'
 import { LeaderboardSSE } from './sse'
+import { OfflineQueue } from './offline-queue'
 
 export * from './types'
 export * from './sse'
 export { LeaderboardWebSocket, LeaderboardSSE }
+export { OfflineQueue } from './offline-queue'
 
 /**
  * GlobalLeaderboards SDK client for interacting with the GlobalLeaderboards.net API
@@ -34,6 +40,8 @@ export class GlobalLeaderboards {
   private readonly config: Required<GlobalLeaderboardsConfig>
   private wsClient: LeaderboardWebSocket | null = null
   private sseClient: LeaderboardSSE | null = null
+  private offlineQueue: OfflineQueue
+  private isOnline = true
   readonly version: string = SDK_VERSION
 
   /**
@@ -41,6 +49,7 @@ export class GlobalLeaderboards {
    * 
    * @param apiKey - Your API key from GlobalLeaderboards.net
    * @param config - Optional configuration options
+   * @param config.defaultLeaderboardId - Default leaderboard ID for simplified submit() calls
    * @param config.baseUrl - API base URL (default: https://api.globalleaderboards.net)
    * @param config.wsUrl - WebSocket URL (default: wss://api.globalleaderboards.net)
    * @param config.timeout - Request timeout in ms (default: 30000)
@@ -57,29 +66,50 @@ export class GlobalLeaderboards {
   constructor(apiKey: string, config?: Partial<GlobalLeaderboardsConfig>) {
     this.config = {
       apiKey,
+      defaultLeaderboardId: config?.defaultLeaderboardId,
       baseUrl: config?.baseUrl || 'https://api.globalleaderboards.net',
       wsUrl: config?.wsUrl || 'wss://api.globalleaderboards.net',
       timeout: config?.timeout || 30000,
       autoRetry: config?.autoRetry ?? true,
       maxRetries: config?.maxRetries || 3
-    }
+    } as Required<GlobalLeaderboardsConfig>
+    
+    // Initialize offline queue
+    this.offlineQueue = new OfflineQueue(apiKey)
+    
+    // Set up network detection
+    this.setupNetworkDetection()
+    
+    // Check initial network state
+    this.isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
   }
 
   /**
    * Submit a score to a leaderboard with validation
    * 
+   * Supports three signature variations:
+   * - `submit(userId, score)` - Uses default leaderboard ID
+   * - `submit(userId, score, leaderboardId)` - Specify leaderboard
+   * - `submit(userId, score, options)` - Full options object
+   * 
+   * When offline or queue not empty, submissions are queued and processed when online.
+   * 
    * @param userId - Unique user identifier
    * @param score - Score value (must be >= 0)
-   * @param options - Submission options
-   * @param options.leaderboardId - Target leaderboard ID
-   * @param options.userName - Display name (1-50 chars, alphanumeric + accents)
-   * @param options.metadata - Optional metadata to store with the score
-   * @returns Score submission response with rank and operation details
-   * @throws {GlobalLeaderboardsError} If validation fails or API returns an error
+   * @param leaderboardIdOrOptions - Leaderboard ID string or options object
+   * @returns Score submission response or queued response
+   * @throws {GlobalLeaderboardsError} If validation fails
    * 
    * @example
    * ```typescript
-   * const result = await leaderboard.submit('user-123', 1500, {
+   * // Using default leaderboard
+   * await leaderboard.submit('user-123', 1500)
+   * 
+   * // Specify leaderboard
+   * await leaderboard.submit('user-123', 1500, 'leaderboard-456')
+   * 
+   * // Full options
+   * await leaderboard.submit('user-123', 1500, {
    *   leaderboardId: 'leaderboard-456',
    *   userName: 'PlayerOne',
    *   metadata: { level: 5 }
@@ -89,17 +119,44 @@ export class GlobalLeaderboards {
   async submit(
     userId: string,
     score: number,
-    options: {
-      leaderboardId: string
+    leaderboardIdOrOptions?: string | {
+      leaderboardId?: string
       userName?: string
       metadata?: Record<string, unknown>
     }
-  ): Promise<SubmitScoreResponse> {
+  ): Promise<SubmitScoreResponse | QueuedSubmitResponse> {
     // Validate score (must be >= 0)
     if (score < 0) {
       throw new GlobalLeaderboardsError(
         'Score must be greater than or equal to 0',
         'INVALID_SCORE'
+      )
+    }
+
+    // Parse arguments to normalized options
+    let options: {
+      leaderboardId?: string
+      userName?: string
+      metadata?: Record<string, unknown>
+    }
+    
+    if (typeof leaderboardIdOrOptions === 'string') {
+      // submit(userId, score, leaderboardId)
+      options = { leaderboardId: leaderboardIdOrOptions }
+    } else if (leaderboardIdOrOptions) {
+      // submit(userId, score, options)
+      options = leaderboardIdOrOptions
+    } else {
+      // submit(userId, score) - use default
+      options = {}
+    }
+
+    // Use default leaderboard if not specified
+    const leaderboardId = options.leaderboardId || this.config.defaultLeaderboardId
+    if (!leaderboardId) {
+      throw new GlobalLeaderboardsError(
+        'Leaderboard ID is required (specify in options or set defaultLeaderboardId in constructor)',
+        'MISSING_LEADERBOARD_ID'
       )
     }
 
@@ -122,8 +179,24 @@ export class GlobalLeaderboards {
       )
     }
 
+    // Check if offline or queue not empty
+    if (!this.isOnline || this.offlineQueue.hasItems()) {
+      // Queue the operation
+      return this.offlineQueue.enqueue({
+        method: 'submit',
+        params: {
+          userId,
+          score,
+          leaderboardId,
+          userName,
+          metadata: options.metadata
+        }
+      })
+    }
+
+    // Online and queue empty - execute immediately
     const request: SubmitScoreRequest = {
-      leaderboard_id: options.leaderboardId,
+      leaderboard_id: leaderboardId,
       user_id: userId,
       user_name: userName,
       score,
@@ -133,50 +206,6 @@ export class GlobalLeaderboards {
     return this.request<SubmitScoreResponse>('POST', '/v1/scores', request)
   }
 
-  /**
-   * Submit a score using a simplified API
-   * 
-   * @param playerId - Player's unique identifier
-   * @param score - Score value (must be >= 0)
-   * @param leaderboardId - Target leaderboard ID
-   * @param options - Optional submission options
-   * @param options.userName - Display name (defaults to playerId)
-   * @param options.metadata - Optional metadata
-   * @returns Score submission response
-   * @throws {GlobalLeaderboardsError} If leaderboard ID is missing or validation fails
-   * 
-   * @example
-   * ```typescript
-   * // Using default leaderboard from config
-   * await leaderboard.submitScore('player-123', 2500)
-   * 
-   * // Specify leaderboard
-   * await leaderboard.submitScore('player-123', 2500, 'leaderboard-456')
-   * ```
-   */
-  async submitScore(
-    playerId: string,
-    score: number,
-    leaderboardId?: string,
-    options?: {
-      userName?: string
-      metadata?: Record<string, unknown>
-    }
-  ): Promise<SubmitScoreResponse> {
-    if (!leaderboardId) {
-      throw new GlobalLeaderboardsError(
-        'Leaderboard ID is required',
-        'MISSING_LEADERBOARD_ID'
-      )
-    }
-
-    // Validation is handled in the submit method
-    return this.submit(playerId, score, {
-      leaderboardId: leaderboardId,
-      userName: options?.userName,
-      metadata: options?.metadata
-    })
-  }
 
   /**
    * Get paginated leaderboard entries
@@ -221,29 +250,83 @@ export class GlobalLeaderboards {
   /**
    * Submit multiple scores in bulk for better performance
    * 
-   * @param scores - Array of scores to submit (max 100)
+   * Accepts mixed formats for flexibility:
+   * - `[userId, score]` - Uses default leaderboard
+   * - `[userId, score, leaderboardId]` - Specify leaderboard
+   * - Full object with all options
+   * 
+   * @param submissions - Array of score submissions in various formats (max 100)
    * @returns Bulk submission response with individual results and summary
    * @throws {GlobalLeaderboardsError} If validation fails or API returns an error
    * 
    * @example
    * ```typescript
    * const results = await leaderboard.submitBulk([
-   *   {
-   *     leaderboard_id: 'leaderboard-456',
-   *     user_id: 'user-123',
-   *     user_name: 'Player1',
-   *     score: 1000
-   *   },
-   *   {
-   *     leaderboard_id: 'leaderboard-456',
-   *     user_id: 'user-456',
-   *     user_name: 'Player2',
-   *     score: 2000
+   *   ['user-123', 1000],                    // Uses default leaderboard
+   *   ['user-456', 2000, 'leaderboard-789'], // Specific leaderboard
+   *   {                                      // Full options
+   *     userId: 'user-789',
+   *     score: 3000,
+   *     leaderboardId: 'leaderboard-789',
+   *     userName: 'TopPlayer',
+   *     metadata: { level: 10 }
    *   }
    * ])
    * ```
    */
-  async submitBulk(scores: SubmitScoreRequest[]): Promise<BulkSubmitScoreResponse> {
+  async submitBulk(submissions: FlexibleScoreSubmission[]): Promise<BulkSubmitScoreResponse> {
+    // Convert flexible formats to standard SubmitScoreRequest
+    const scores: SubmitScoreRequest[] = submissions.map(submission => {
+      if (Array.isArray(submission)) {
+        // Handle array formats
+        const [userId, score, leaderboardId] = submission
+        const finalLeaderboardId = leaderboardId || this.config.defaultLeaderboardId
+        
+        if (!finalLeaderboardId) {
+          throw new GlobalLeaderboardsError(
+            'Leaderboard ID is required for bulk submission',
+            'MISSING_LEADERBOARD_ID'
+          )
+        }
+        
+        return {
+          user_id: userId,
+          user_name: userId, // Default to userId
+          score,
+          leaderboard_id: finalLeaderboardId
+        }
+      } else {
+        // Handle object format
+        const leaderboardId = submission.leaderboardId || this.config.defaultLeaderboardId
+        
+        if (!leaderboardId) {
+          throw new GlobalLeaderboardsError(
+            'Leaderboard ID is required for bulk submission',
+            'MISSING_LEADERBOARD_ID'
+          )
+        }
+        
+        return {
+          user_id: submission.userId,
+          user_name: submission.userName || submission.userId,
+          score: submission.score,
+          leaderboard_id: leaderboardId,
+          metadata: submission.metadata
+        }
+      }
+    })
+    
+    // Check if offline or queue not empty
+    if (!this.isOnline || this.offlineQueue.hasItems()) {
+      // Queue the bulk operation
+      // For bulk operations, we can't return a proper BulkSubmitScoreResponse when queued
+      // So we throw an error instead - bulk operations should be retried when online
+      throw new GlobalLeaderboardsError(
+        'Bulk submissions cannot be queued offline. Please retry when online.',
+        'OFFLINE_BULK_NOT_SUPPORTED'
+      )
+    }
+    
     const request: BulkSubmitScoreRequest = { scores }
     return this.request<BulkSubmitScoreResponse>('POST', '/v1/scores/bulk', request)
   }
@@ -744,5 +827,169 @@ export class GlobalLeaderboards {
       )
     }
     return false
+  }
+
+  /**
+   * Set up network detection and automatic queue processing
+   * @private
+   */
+  private setupNetworkDetection(): void {
+    if (typeof window === 'undefined') {
+      return
+    }
+    
+    // Handle online event
+    window.addEventListener('online', () => {
+      console.debug('[GlobalLeaderboards] Network is online')
+      this.isOnline = true
+      
+      // Process offline queue when back online
+      this.processOfflineQueue()
+    })
+    
+    // Handle offline event
+    window.addEventListener('offline', () => {
+      console.debug('[GlobalLeaderboards] Network is offline')
+      this.isOnline = false
+    })
+  }
+  
+  /**
+   * Process the offline queue
+   * @private
+   */
+  private async processOfflineQueue(): Promise<void> {
+    if (!this.isOnline || this.offlineQueue.isProcessing()) {
+      return
+    }
+    
+    this.offlineQueue.setProcessing(true)
+    
+    try {
+      const batches = this.offlineQueue.batchOperations()
+      let totalProcessed = 0
+      let totalFailed = 0
+      
+      for (const [key, operations] of batches) {
+        try {
+          if (key.startsWith('bulk_')) {
+            // Process bulk operation
+            const op = operations[0]
+            if (op.params.scores) {
+              await this.request<BulkSubmitScoreResponse>('POST', '/v1/scores/bulk', {
+                scores: op.params.scores
+              })
+              await this.offlineQueue.removeProcessed([op.queueId])
+              totalProcessed++
+            }
+          } else {
+            // Process batched submit operations
+            const scores: SubmitScoreRequest[] = operations.map(op => ({
+              user_id: op.params.userId!,
+              user_name: op.params.userName || op.params.userId!,
+              score: op.params.score!,
+              leaderboard_id: op.params.leaderboardId!,
+              metadata: op.params.metadata
+            }))
+            
+            await this.request<BulkSubmitScoreResponse>('POST', '/v1/scores/bulk', {
+              scores
+            })
+            
+            const queueIds = operations.map(op => op.queueId)
+            await this.offlineQueue.removeProcessed(queueIds)
+            totalProcessed += operations.length
+          }
+          
+          // Emit progress event
+          this.offlineQueue.emit('queue:progress', {
+            processed: totalProcessed,
+            total: this.offlineQueue.size() + totalProcessed
+          })
+        } catch (error) {
+          // Check if permanent error
+          if (error instanceof GlobalLeaderboardsError && 
+              (error.statusCode === 404 || error.statusCode === 401 || error.statusCode === 403)) {
+            // Permanent error - remove from queue
+            for (const op of operations) {
+              await this.offlineQueue.markFailed(op.queueId, true)
+              totalFailed++
+            }
+          } else {
+            // Temporary error - stop processing
+            break
+          }
+        }
+      }
+      
+      // If queue is now empty and we're still online, future submissions go direct
+      if (this.offlineQueue.size() === 0 && this.isOnline) {
+        console.debug('[GlobalLeaderboards] Offline queue processed successfully')
+      }
+    } finally {
+      this.offlineQueue.setProcessing(false)
+    }
+  }
+  
+  /**
+   * Register event handler for queue events
+   * 
+   * @param event - Event type to listen for
+   * @param handler - Handler function
+   * 
+   * @example
+   * ```typescript
+   * leaderboard.on('queue:processed', (data) => {
+   *   console.log('Queue item processed:', data)
+   * })
+   * ```
+   */
+  on(event: QueueEventType, handler: QueueEventHandler): void {
+    this.offlineQueue.on(event, handler)
+  }
+  
+  /**
+   * Unregister event handler
+   * 
+   * @param event - Event type
+   * @param handler - Handler function to remove
+   */
+  off(event: QueueEventType, handler: QueueEventHandler): void {
+    this.offlineQueue.off(event, handler)
+  }
+  
+  /**
+   * Get current offline queue status
+   * 
+   * @returns Queue information including size and processing state
+   */
+  getQueueStatus(): {
+    size: number
+    processing: boolean
+    items: Array<{
+      queueId: string
+      method: string
+      timestamp: number
+    }>
+  } {
+    const items = this.offlineQueue.getQueue()
+    return {
+      size: items.length,
+      processing: this.offlineQueue.isProcessing(),
+      items: items.map(item => ({
+        queueId: item.queueId,
+        method: item.method,
+        timestamp: item.timestamp
+      }))
+    }
+  }
+  
+  /**
+   * Manually trigger offline queue processing
+   * 
+   * @returns Promise that resolves when processing is complete
+   */
+  async processQueue(): Promise<void> {
+    return this.processOfflineQueue()
   }
 }

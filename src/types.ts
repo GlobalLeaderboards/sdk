@@ -4,6 +4,8 @@
 export interface GlobalLeaderboardsConfig {
   /** API key for authentication */
   apiKey: string
+  /** Default leaderboard ID for simplified submit() calls */
+  defaultLeaderboardId?: string
   /** Base URL for the API (default: https://api.globalleaderboards.net) */
   baseUrl?: string
   /** WebSocket URL (default: wss://api.globalleaderboards.net) */
@@ -45,6 +47,32 @@ export interface SubmitScoreResponse {
   /** Score improvement if update operation */
   improvement?: number
 }
+
+/**
+ * Queued score submission response
+ */
+export interface QueuedSubmitResponse extends SubmitScoreResponse {
+  /** Indicates this submission was queued */
+  queued: true
+  /** Unique queue ID */
+  queueId: string
+  /** Position in queue */
+  queuePosition: number
+}
+
+/**
+ * Flexible score submission format
+ */
+export type FlexibleScoreSubmission = 
+  | [userId: string, score: number]
+  | [userId: string, score: number, leaderboardId: string]
+  | {
+      userId: string
+      score: number
+      leaderboardId?: string
+      userName?: string
+      metadata?: Record<string, unknown>
+    }
 
 /**
  * Bulk score submission request
@@ -497,4 +525,41 @@ export interface WebSocketHandlers {
   onUserRankUpdate?: (data: UserRankUpdateMessage['data']) => void
   /** Called for any message */
   onMessage?: (message: WebSocketMessage) => void
+  /** Called when starting a reconnection attempt */
+  onReconnecting?: (attempt: number, maxAttempts: number, nextDelay: number) => void
+}
+
+/**
+ * Offline queue operation
+ */
+export interface QueuedOperation {
+  /** Unique queue ID */
+  queueId: string
+  /** Operation method */
+  method: 'submit' | 'submitBulk'
+  /** Operation parameters */
+  params: {
+    userId?: string
+    score?: number
+    leaderboardId?: string
+    userName?: string
+    metadata?: Record<string, unknown>
+    scores?: SubmitScoreRequest[]
+  }
+  /** Timestamp when queued */
+  timestamp: number
+  /** Number of retry attempts */
+  retryCount?: number
+}
+
+/**
+ * Queue event types
+ */
+export type QueueEventType = 'queue:added' | 'queue:processed' | 'queue:failed' | 'queue:progress'
+
+/**
+ * Queue event handler
+ */
+export interface QueueEventHandler {
+  (event: QueueEventType, data: unknown): void
 }

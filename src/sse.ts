@@ -5,7 +5,9 @@
 import type { 
   GlobalLeaderboardsConfig, 
   GlobalLeaderboardsError,
-  LeaderboardEntry
+  LeaderboardEntry,
+  LeaderboardMutation,
+  UpdateTrigger
 } from './types'
 
 /**
@@ -13,44 +15,31 @@ import type {
  */
 export type SSEEventType = 
   | 'connected'
-  | 'score_update'
-  | 'leaderboard_refresh'
-  | 'rank_change'
+  | 'leaderboard_update' // Changed to match WebSocket
   | 'heartbeat'
   | 'error'
 
 /**
- * Score update event data
+ * Enhanced SSE leaderboard update event data - matches WebSocket format
  */
-export interface SSEScoreUpdateEvent {
+export interface SSELeaderboardUpdateEvent {
   leaderboardId: string
-  newEntry: LeaderboardEntry
-  previousRank?: number
-  totalEntries: number
-  affectedRanks?: number[]
-}
-
-/**
- * Leaderboard refresh event data
- */
-export interface SSELeaderboardRefreshEvent {
-  leaderboardId: string
-  reason: 'reset' | 'bulk_update' | 'manual_refresh'
-  topScores: LeaderboardEntry[]
-  totalEntries: number
-}
-
-/**
- * Rank change event data
- */
-export interface SSERankChangeEvent {
-  leaderboardId: string
-  userId: string
-  userName: string
-  previousRank: number
-  newRank: number
-  score: number
-  direction: 'up' | 'down'
+  updateType: 'score_update' | 'full_refresh' | 'bulk_update'
+  
+  // Complete current state (top 100 entries)
+  leaderboard: {
+    entries: LeaderboardEntry[]
+    totalEntries: number
+    displayedEntries: number
+  }
+  
+  // What changed
+  mutations: LeaderboardMutation[]
+  
+  // What triggered this update
+  trigger: UpdateTrigger
+  
+  sequence: number // For ordering/deduplication
 }
 
 /**
@@ -60,8 +49,7 @@ export interface SSEEventHandlers {
   onConnect?: () => void
   onDisconnect?: () => void
   onError?: (error: GlobalLeaderboardsError) => void
-  onLeaderboardUpdate?: (data: SSELeaderboardRefreshEvent) => void
-  onUserRankUpdate?: (data: SSERankChangeEvent) => void
+  onLeaderboardUpdate?: (data: SSELeaderboardUpdateEvent) => void
   onHeartbeat?: (data: { connectionId: string; serverTime: string }) => void
   onMessage?: (message: any) => void
 }
@@ -177,52 +165,19 @@ export class LeaderboardSSE {
         }
       })
 
-      // Map score_update to both onLeaderboardUpdate and onUserRankUpdate if applicable
-      eventSource.addEventListener('score_update', (event: MessageEvent) => {
+      // Handle enhanced leaderboard_update event (matches WebSocket format)
+      eventSource.addEventListener('leaderboard_update', (event: MessageEvent) => {
         try {
-          const data = JSON.parse(event.data) as SSEScoreUpdateEvent
-          
-          // Always notify leaderboard update
-          handlers.onLeaderboardUpdate?.({
+          const data = JSON.parse(event.data) as SSELeaderboardUpdateEvent
+          console.debug('[LeaderboardSSE] Received leaderboard_update:', {
             leaderboardId: data.leaderboardId,
-            reason: 'manual_refresh',
-            topScores: [data.newEntry],
-            totalEntries: data.totalEntries
+            mutations: data.mutations.length,
+            entries: data.leaderboard.entries.length,
+            sequence: data.sequence
           })
-          
-          // If we have previousRank, it means the user's rank changed
-          if (data.previousRank !== undefined && data.previousRank !== data.newEntry.rank) {
-            handlers.onUserRankUpdate?.({
-              leaderboardId: data.leaderboardId,
-              userId: data.newEntry.user_id,
-              userName: data.newEntry.user_name,
-              previousRank: data.previousRank,
-              newRank: data.newEntry.rank,
-              score: data.newEntry.score,
-              direction: data.newEntry.rank < data.previousRank ? 'up' : 'down'
-            })
-          }
-        } catch (error) {
-          console.error('[LeaderboardSSE] Failed to parse score_update event:', error)
-        }
-      })
-
-      eventSource.addEventListener('leaderboard_refresh', (event: MessageEvent) => {
-        try {
-          const data = JSON.parse(event.data) as SSELeaderboardRefreshEvent
           handlers.onLeaderboardUpdate?.(data)
         } catch (error) {
-          console.error('[LeaderboardSSE] Failed to parse leaderboard_refresh event:', error)
-        }
-      })
-
-      // Map rank_change to onUserRankUpdate
-      eventSource.addEventListener('rank_change', (event: MessageEvent) => {
-        try {
-          const data = JSON.parse(event.data) as SSERankChangeEvent
-          handlers.onUserRankUpdate?.(data)
-        } catch (error) {
-          console.error('[LeaderboardSSE] Failed to parse rank_change event:', error)
+          console.error('[LeaderboardSSE] Failed to parse leaderboard_update event:', error)
         }
       })
 

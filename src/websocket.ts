@@ -28,6 +28,8 @@ export class LeaderboardWebSocket {
   private isConnecting = false
   private shouldReconnect = true
   private permanentError: GlobalLeaderboardsError | null = null
+  private isOnline = true
+  private networkListenersBound = false
   
   constructor(
     private readonly wsUrl: string,
@@ -45,6 +47,12 @@ export class LeaderboardWebSocket {
       pingInterval: 30000,
       ...options
     }
+    
+    // Set up network detection
+    this.setupNetworkListeners()
+    
+    // Check initial network state
+    this.isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
   }
 
   /**
@@ -367,6 +375,12 @@ export class LeaderboardWebSocket {
   }
 
   private scheduleReconnect(): void {
+    // Don't reconnect if we're offline
+    if (!this.isOnline) {
+      console.debug('[WebSocket] Skipping reconnection - network is offline')
+      return
+    }
+
     if (this.reconnectAttempts >= this.options.maxReconnectAttempts!) {
       this.handleError(
         new GlobalLeaderboardsError(
@@ -378,10 +392,28 @@ export class LeaderboardWebSocket {
     }
 
     this.reconnectAttempts++
-    const delay = this.options.reconnectDelay! * Math.pow(2, this.reconnectAttempts - 1)
+    const baseDelay = this.options.reconnectDelay! * Math.pow(2, this.reconnectAttempts - 1)
+    
+    // Add jitter (±25%)
+    const jitter = baseDelay * 0.25
+    const randomJitter = (Math.random() - 0.5) * 2 * jitter
+    const delay = Math.max(0, baseDelay + randomJitter)
+    
+    // Notify about reconnection attempt
+    this.handlers.onReconnecting?.(
+      this.reconnectAttempts,
+      this.options.maxReconnectAttempts!,
+      Math.round(delay)
+    )
 
     this.reconnectTimer = setTimeout(() => {
-      this.connect()
+      // Check network status again before attempting
+      if (this.isOnline) {
+        this.connect()
+      } else {
+        // If still offline, schedule another attempt
+        this.scheduleReconnect()
+      }
     }, delay)
   }
 
@@ -403,5 +435,84 @@ export class LeaderboardWebSocket {
     }
 
     this.isConnecting = false
+  }
+  
+  /**
+   * Set up network status listeners
+   */
+  private setupNetworkListeners(): void {
+    if (typeof window === 'undefined' || this.networkListenersBound) {
+      return
+    }
+    
+    const handleOnline = () => {
+      console.debug('[WebSocket] Network is online')
+      this.isOnline = true
+      
+      // If we have a permanent error, don't attempt reconnection
+      if (this.permanentError) {
+        return
+      }
+      
+      // If we're not connected and should reconnect, try to connect
+      if (!this.isConnected && !this.isConnecting && this.shouldReconnect) {
+        console.debug('[WebSocket] Attempting reconnection after coming online')
+        this.connect()
+      }
+    }
+    
+    const handleOffline = () => {
+      console.debug('[WebSocket] Network is offline')
+      this.isOnline = false
+      
+      // Cancel any pending reconnection attempts
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer)
+        this.reconnectTimer = null
+      }
+    }
+    
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    
+    this.networkListenersBound = true
+    
+    // Store references for cleanup if needed
+    ;(this as unknown as { 
+      _handleOnline?: () => void
+      _handleOffline?: () => void 
+    })._handleOnline = handleOnline
+    ;(this as unknown as { 
+      _handleOnline?: () => void
+      _handleOffline?: () => void 
+    })._handleOffline = handleOffline
+  }
+  
+  /**
+   * Manually trigger a reconnection attempt
+   * Useful for application-level retry logic
+   */
+  reconnect(): void {
+    if (this.isConnected || this.isConnecting) {
+      return
+    }
+    
+    if (this.permanentError) {
+      throw this.permanentError
+    }
+    
+    // Reset reconnection attempts for manual reconnect
+    this.reconnectAttempts = 0
+    this.shouldReconnect = true
+    
+    // Check network status
+    if (!this.isOnline) {
+      throw new GlobalLeaderboardsError(
+        'Cannot reconnect while offline',
+        'WS_OFFLINE'
+      )
+    }
+    
+    this.connect()
   }
 }

@@ -30,12 +30,17 @@ const leaderboard = new GlobalLeaderboards('your-api-key')
 import {GlobalLeaderboards} from '@globalleaderboards/sdk'
 
 // Initialize the SDK
-const leaderboard = new GlobalLeaderboards('your-api-key')
+const leaderboard = new GlobalLeaderboards('your-api-key', {
+  defaultLeaderboardId: 'your-default-leaderboard' // Optional
+})
 
-// Submit a score
+// Submit a score - three ways
+await leaderboard.submit('player-id', 1250) // Uses default leaderboard
+await leaderboard.submit('player-id', 1250, 'specific-leaderboard')
 await leaderboard.submit('player-id', 1250, {
   leaderboardId: 'your-leaderboard-id',
-  userName: 'PlayerOne'
+  userName: 'PlayerOne',
+  metadata: { level: 5 }
 })
 
 // Get leaderboard
@@ -77,6 +82,7 @@ ws.subscribe('your-leaderboard-id')
 - 🚀 **Simple API** - Get started in minutes
 - 🌍 **Global Performance** - <100ms response times worldwide
 - 🔄 **Real-time Updates** - WebSocket and SSE support for live leaderboards
+- 📱 **Offline Support** - Automatic queuing when offline with chrome.storage.sync
 - 🛡️ **Type Safe** - Full TypeScript support
 - 🔒 **Secure** - API key authentication with rate limiting
 - 🎮 **Game Ready** - Built for games and competitive applications
@@ -97,7 +103,7 @@ const leaderboard = new GlobalLeaderboards(apiKey, options)
 
 **Options:**
 
-- `appId` (string) - Optional application ID to restrict operations
+- `defaultLeaderboardId` (string) - Default leaderboard for simplified submit() calls
 - `baseUrl` (string) - API base URL (default:
   `https://api.globalleaderboards.net`)
 - `wsUrl` (string) - WebSocket URL (default: `wss://api.globalleaderboards.net`)
@@ -142,28 +148,37 @@ await leaderboard.submitScore('player-123', 2500)
 await leaderboard.submitScore('player-123', 2500, 'leaderboard-456')
 ```
 
-#### submitBulk(scores)
+#### submitBulk(submissions)
 
-Submit multiple scores in a single request for better performance.
+Submit multiple scores in bulk with flexible formats. Intelligently batches by leaderboard.
 
 ```javascript
 const results = await leaderboard.submitBulk([
+  // Array format with default leaderboard
+  ['user-123', 1000],
+  
+  // Array format with specific leaderboard
+  ['user-456', 2000, 'leaderboard-789'],
+  
+  // Full object format
   {
-    leaderboard_id: 'leaderboard-456',
-    user_id: 'user-123',
-    user_name: 'Player1',
-    score: 1000
-  },
-  {
-    leaderboard_id: 'leaderboard-456',
-    user_id: 'user-456',
-    user_name: 'Player2',
-    score: 2000
+    userId: 'user-789',
+    score: 3000,
+    leaderboardId: 'leaderboard-789',
+    userName: 'TopPlayer',
+    metadata: { level: 10 }
   }
 ])
 
-// Returns: { results: [...], summary: { total: 2, successful: 2, failed: 0 } }
+// Returns: { results: [...], summary: { total: 3, successful: 3, failed: 0 } }
 ```
+
+**Parameters:**
+
+- `submissions` - Array of submissions in any of these formats:
+  - `[userId, score]` - Uses default leaderboard
+  - `[userId, score, leaderboardId]`
+  - Object with full options
 
 ### Leaderboard Methods
 
@@ -327,6 +342,31 @@ const ws = leaderboard.connectWebSocket({
 - `onLeaderboardUpdate` - Called when leaderboard data changes (see Enhanced Message Format below)
 - `onUserRankUpdate` - Called when user's rank changes
 - `onMessage` - Called for any WebSocket message
+- `onReconnecting` - Called when starting a reconnection attempt (includes attempt number, max attempts, and next delay)
+
+**Reconnection Features:**
+
+The WebSocket client includes intelligent reconnection with:
+- **Network detection** - Automatically pauses when offline and resumes when online
+- **Exponential backoff** - Delays double with each attempt (1s, 2s, 4s, 8s...)
+- **Jitter** - ±25% randomization prevents thundering herd
+- **Permanent error handling** - Won't retry after authentication failures
+- **Manual control** - Use `ws.reconnect()` for custom retry logic
+
+```javascript
+// Example: Handling reconnection events
+const ws = leaderboard.connectWebSocket({
+  onReconnecting: (attempt, maxAttempts, nextDelay) => {
+    console.log(`Reconnecting... Attempt ${attempt}/${maxAttempts}`)
+    console.log(`Next attempt in ${nextDelay}ms`)
+    // Show reconnection UI to user
+  },
+  onConnect: () => {
+    console.log('Connected!')
+    // Hide reconnection UI
+  }
+})
+```
 
 #### Enhanced WebSocket Message Format
 
@@ -477,6 +517,19 @@ Close the WebSocket connection.
 ws.disconnect()
 ```
 
+#### reconnect()
+
+Manually trigger a reconnection attempt. Useful for implementing custom retry logic.
+
+```javascript
+try {
+  ws.reconnect()
+} catch (error) {
+  // Will throw if offline or permanent error occurred
+  console.error('Cannot reconnect:', error.message)
+}
+```
+
 ### SSE vs WebSocket
 
 Choose the right real-time technology for your use case:
@@ -524,6 +577,45 @@ Generate a new ULID (Universally Unique Lexicographically Sortable Identifier).
 const id = leaderboard.generateId()
 // Returns: '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 ```
+
+## Offline Support
+
+The SDK automatically queues score submissions when offline and syncs them when back online:
+
+```javascript
+// Monitor queue events
+leaderboard.on('queue:added', (data) => {
+  console.log('Score queued:', data)
+})
+
+leaderboard.on('queue:processed', (data) => {
+  console.log('Queued score submitted:', data)
+})
+
+leaderboard.on('queue:failed', (data) => {
+  console.log('Queued score failed:', data)
+})
+
+leaderboard.on('queue:progress', (data) => {
+  console.log(`Progress: ${data.processed}/${data.total}`)
+})
+
+// Check queue status
+const status = leaderboard.getQueueStatus()
+console.log(`Queue size: ${status.size}`)
+console.log(`Processing: ${status.processing}`)
+
+// Manually trigger queue processing
+await leaderboard.processQueue()
+```
+
+**Features:**
+- Automatic detection of online/offline state
+- Persistent storage using chrome.storage.sync (fallback to localStorage)
+- Intelligent batching of submissions by leaderboard
+- Maximum queue size of 1000 items
+- 24-hour TTL for queued items
+- Automatic processing when back online
 
 ## Error Handling
 
