@@ -53,10 +53,10 @@ const scores = await leaderboard.getLeaderboard('your-leaderboard-id', {
 // Recommended: Server-Sent Events (simpler, auto-reconnect, firewall-friendly)
 const sse = leaderboard.connectSSE('your-leaderboard-id', {
   onLeaderboardUpdate: (data) => {
-    console.log('Leaderboard updated:', data)
-  },
-  onUserRankUpdate: (data) => {
-    console.log('Rank changed:', data)
+    // Same enhanced format as WebSocket
+    console.log('Full leaderboard:', data.leaderboard.entries)
+    console.log('What changed:', data.mutations)
+    console.log('Triggered by:', data.trigger)
   }
 })
 
@@ -264,11 +264,10 @@ const connection = leaderboard.connectSSE('leaderboard-456', {
     console.log('SSE connected')
   },
   onLeaderboardUpdate: (data) => {
-    console.log('Leaderboard updated:', data.topScores)
-    console.log('Total entries:', data.totalEntries)
-  },
-  onUserRankUpdate: (data) => {
-    console.log(`${data.userName} moved from rank ${data.previousRank} to ${data.newRank}`)
+    // Enhanced format with full state and mutations (same as WebSocket)
+    console.log('Full leaderboard:', data.leaderboard.entries) // Top 100 entries
+    console.log('What changed:', data.mutations) // Array of changes
+    console.log('Triggered by:', data.trigger) // What caused the update
   },
   onError: (error) => {
     console.error('SSE error:', error)
@@ -291,8 +290,7 @@ connection.close()
 - `onConnect` - Connection established
 - `onDisconnect` - Connection closed
 - `onError` - Error occurred
-- `onLeaderboardUpdate` - Leaderboard data changed (new scores, refresh, etc.)
-- `onUserRankUpdate` - User's rank changed
+- `onLeaderboardUpdate` - Leaderboard data changed with enhanced format (see Enhanced Message Format below)
 - `onHeartbeat` - Keep-alive signal from server (optional)
 - `onMessage` - Raw message handler (optional)
 
@@ -310,9 +308,72 @@ Disconnect all SSE connections.
 leaderboard.disconnectSSE()
 ```
 
+#### Enhanced SSE Message Format
+
+**New in v0.5.27**: Both SSE and WebSocket now use the same enhanced message format. The `onLeaderboardUpdate` handler receives:
+
+```javascript
+{
+  leaderboardId: "01K1AKF9NMZFX8FK8XA81QYK2J",
+  updateType: "score_update", // or "full_refresh", "bulk_update"
+  
+  // Complete current state (top 100 entries)
+  leaderboard: {
+    entries: [
+      {
+        rank: 1,
+        userId: "user123",
+        userName: "Alice",
+        score: 1000,
+        timestamp: "2025-07-29T08:15:37.197Z",
+        metadata: { /* custom data */ }
+      },
+      // ... up to 100 entries
+    ],
+    totalEntries: 150,
+    displayedEntries: 100
+  },
+  
+  // What changed (for animations)
+  mutations: [
+    {
+      type: "new_entry",
+      userId: "user456",
+      newRank: 3,
+      score: 850,
+      userName: "Bob"
+    },
+    {
+      type: "rank_change",
+      userId: "user789",
+      previousRank: 3,
+      newRank: 4,
+      score: 800
+    }
+    // ... other mutations
+  ],
+  
+  // What triggered this update
+  trigger: {
+    type: "score_submission",
+    submissions: [
+      {
+        userId: "user123",
+        userName: "Alice",
+        score: 1000,
+        previousScore: 950,
+        timestamp: "2025-07-29T08:15:37.197Z"
+      }
+    ]
+  },
+  
+  sequence: 42 // For ordering/deduplication
+}
+```
+
 ### WebSocket Methods
 
-**Note:** The current WebSocket implementation only supports receiving updates from the server. It does not provide methods to send custom data to the server, making it functionally equivalent to SSE but with more complexity. For this reason, **we recommend using SSE instead** unless you specifically need WebSocket for compatibility reasons.
+**Note:** Both SSE and WebSocket receive the same enhanced message format. SSE is recommended for most use cases as it's simpler and more firewall-friendly.
 
 #### connectWebSocket(handlers, options?)
 
