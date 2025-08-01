@@ -641,7 +641,33 @@ const id = leaderboard.generateId()
 
 ## Offline Support
 
-The SDK automatically queues score submissions when offline and syncs them when back online:
+The SDK provides robust offline support with automatic queuing and synchronization of score submissions. When your application goes offline, scores are automatically queued and persisted, then synchronized when connectivity is restored.
+
+### How It Works
+
+1. **Automatic Detection**: The SDK monitors network connectivity using browser APIs
+2. **Smart Queuing**: When offline, `submit()` operations return a queued response immediately
+3. **Persistent Storage**: Queue is saved to chrome.storage.sync (with localStorage fallback)
+4. **Automatic Sync**: Queue processes automatically when back online
+5. **Intelligent Batching**: Multiple scores for the same leaderboard are batched together
+
+### Basic Usage
+
+```javascript
+// Score submission works seamlessly online or offline
+const result = await leaderboard.submit('user-123', 1000, {
+  leaderboardId: 'game-scores',
+  userName: 'Player'
+})
+
+// When offline, you'll get a queued response
+if (result.queued) {
+  console.log(`Score queued with ID: ${result.queueId}`)
+  console.log(`Queue position: ${result.queuePosition}`)
+}
+```
+
+### Queue Event Monitoring
 
 ```javascript
 // Monitor queue events
@@ -655,28 +681,121 @@ leaderboard.on('queue:processed', (data) => {
 
 leaderboard.on('queue:failed', (data) => {
   console.log('Queued score failed:', data)
+  // data.permanent indicates if the failure is permanent (won't retry)
 })
 
 leaderboard.on('queue:progress', (data) => {
   console.log(`Progress: ${data.processed}/${data.total}`)
 })
+```
 
+### Queue Management
+
+```javascript
 // Check queue status
 const status = leaderboard.getQueueStatus()
 console.log(`Queue size: ${status.size}`)
 console.log(`Processing: ${status.processing}`)
+console.log('Queued items:', status.items)
 
 // Manually trigger queue processing
 await leaderboard.processQueue()
+
+// Clear the queue (use with caution)
+// Note: This requires direct access to offlineQueue
+// leaderboard.offlineQueue.clear()
 ```
 
-**Features:**
-- Automatic detection of online/offline state
-- Persistent storage using chrome.storage.sync (fallback to localStorage)
-- Intelligent batching of submissions by leaderboard
-- Maximum queue size of 1000 items
-- 24-hour TTL for queued items
-- Automatic processing when back online
+### Storage Details
+
+The offline queue uses a hybrid storage approach:
+
+1. **Chrome Extension Environment**: Uses `chrome.storage.sync` for cross-device synchronization
+2. **Regular Web Environment**: Falls back to `localStorage` for persistence
+3. **Storage Key**: Isolated per API key using a hash (`gl_queue_${hash}`)
+
+### Queue Limits and Behavior
+
+- **Maximum Queue Size**: 1,000 items
+- **Item TTL**: 24 hours (expired items are automatically cleaned)
+- **Batch Size**: Up to 100 scores per batch
+- **Retry Logic**: Failed submissions are retried with incremental retry counts
+- **Permanent Failures**: 401, 403, 404 errors mark items as permanently failed
+
+### Advanced Example
+
+```javascript
+// Complete offline-capable game integration
+class OfflineCapableGame {
+  constructor(apiKey) {
+    this.leaderboard = new GlobalLeaderboards(apiKey)
+    this.setupQueueMonitoring()
+  }
+
+  setupQueueMonitoring() {
+    // Show UI indicator when scores are queued
+    this.leaderboard.on('queue:added', (data) => {
+      this.showNotification('Score saved offline - will sync when online')
+    })
+
+    // Update UI when scores are synced
+    this.leaderboard.on('queue:processed', (data) => {
+      this.showNotification('Offline scores synced!')
+    })
+
+    // Handle permanent failures
+    this.leaderboard.on('queue:failed', (data) => {
+      if (data.permanent) {
+        this.showError('Score sync failed permanently')
+      }
+    })
+
+    // Show sync progress
+    this.leaderboard.on('queue:progress', (data) => {
+      const percent = (data.processed / data.total) * 100
+      this.updateProgressBar(percent)
+    })
+  }
+
+  async submitScore(score) {
+    try {
+      const result = await this.leaderboard.submit(
+        this.playerId,
+        score,
+        {
+          leaderboardId: this.leaderboardId,
+          userName: this.playerName
+        }
+      )
+
+      if (result.queued) {
+        // Score was queued for later
+        return { 
+          success: true, 
+          offline: true, 
+          queueId: result.queueId 
+        }
+      } else {
+        // Score was submitted immediately
+        return { 
+          success: true, 
+          offline: false, 
+          rank: result.rank 
+        }
+      }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  }
+}
+```
+
+### Important Notes
+
+- **Bulk Operations**: Currently, bulk score submissions (`submitBulk()`) are NOT queued when offline and will throw an error
+- **Queue Processing**: Happens automatically on reconnection, no manual intervention needed
+- **Data Integrity**: Scores are never lost - either submitted successfully or remain queued
+- **Performance**: Queue operations are asynchronous and won't block your application
 
 ## Error Handling
 

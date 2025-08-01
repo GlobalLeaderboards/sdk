@@ -230,8 +230,6 @@ export class LeaderboardWebSocket {
       
       case 'error':
         const errorMsg = message as ErrorMessage
-        console.log('[WebSocket] Error message received:', errorMsg)
-        console.log('[WebSocket] Error object:', errorMsg.error)
         
         if (errorMsg.error && typeof errorMsg.error === 'object' && 'message' in errorMsg.error) {
           const error = new GlobalLeaderboardsError(
@@ -251,7 +249,6 @@ export class LeaderboardWebSocket {
             // Permanent error - stop reconnection attempts
             this.shouldReconnect = false
             this.permanentError = error
-            console.error('[WebSocket] Permanent error detected, disabling reconnection:', error.code)
             
             // Close the connection immediately
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -262,8 +259,6 @@ export class LeaderboardWebSocket {
           this.handleError(error)
         } else {
           // Handle invalid error format
-          console.error('[WebSocket] Invalid error message format:', errorMsg)
-          console.error('[WebSocket] Expected error object with message and code, got:', errorMsg.error)
           this.handleError(
             new GlobalLeaderboardsError(
               'Invalid error message format',
@@ -279,12 +274,10 @@ export class LeaderboardWebSocket {
         
       case 'pong':
         // Pong received in response to our ping - no action needed
-        console.debug('[WebSocket] Pong received')
         break
         
       case 'connection_info':
-        // Connection info is informational, just log it
-        console.debug('[WebSocket] Connection info received:', message)
+        // Connection info is informational
         break
         
       case 'update':
@@ -293,7 +286,7 @@ export class LeaderboardWebSocket {
         break
         
       default:
-        console.warn('[WebSocket] Unknown message type:', message.type)
+        // Unknown message type - ignore
     }
   }
 
@@ -377,7 +370,6 @@ export class LeaderboardWebSocket {
   private scheduleReconnect(): void {
     // Don't reconnect if we're offline
     if (!this.isOnline) {
-      console.debug('[WebSocket] Skipping reconnection - network is offline')
       return
     }
 
@@ -446,7 +438,6 @@ export class LeaderboardWebSocket {
     }
     
     const handleOnline = () => {
-      console.debug('[WebSocket] Network is online')
       this.isOnline = true
       
       // If we have a permanent error, don't attempt reconnection
@@ -456,13 +447,11 @@ export class LeaderboardWebSocket {
       
       // If we're not connected and should reconnect, try to connect
       if (!this.isConnected && !this.isConnecting && this.shouldReconnect) {
-        console.debug('[WebSocket] Attempting reconnection after coming online')
         this.connect()
       }
     }
     
     const handleOffline = () => {
-      console.debug('[WebSocket] Network is offline')
       this.isOnline = false
       
       // Cancel any pending reconnection attempts
